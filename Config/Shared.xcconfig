@@ -1,0 +1,28 @@
+// Réglages communs Debug + Release.
+
+PRODUCT_BUNDLE_IDENTIFIER = com.byteonedev.inky
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+SWIFT_VERSION = 6.0
+MACOSX_DEPLOYMENT_TARGET = 14.0
+GENERATE_INFOPLIST_FILE = NO
+INFOPLIST_FILE = App/Info.plist
+COMBINE_HIDPI_IMAGES = YES
+
+// ── Signature ───────────────────────────────────────────────────────────────
+// Pas de compte Apple Developer payant → pas de notarisation.
+// Par défaut on signe « ad hoc » ("-"). Problème : la signature ad hoc change à
+// chaque build, et macOS (TCC) considère alors l'app comme une NOUVELLE app :
+// l'autorisation Accessibilité est perdue à chaque compilation.
+// Solution en local : un certificat auto-signé STABLE, déclaré dans
+// Config/Local.xcconfig (non versionné). Voir Config/Local.xcconfig.example.
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+// Le « hardened runtime » n'est exigé que pour la notarisation. On le laisse
+// désactivé : sinon il faudrait aussi l'entitlement audio-input.
+ENABLE_HARDENED_RUNTIME = NO
+
+// Surcharge locale optionnelle (le « ? » = pas d'erreur si le fichier manque).
+#include? "Local.xcconfig"

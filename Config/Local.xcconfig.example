@@ -1,0 +1,9 @@
+// Copie ce fichier en Config/Local.xcconfig (ignoré par git) et mets le nom
+// d'un certificat de signature de code présent dans ton trousseau.
+//
+// Créer un certificat auto-signé : Trousseau d'accès > Assistant de certification
+// > Créer un certificat… > Type : « Signature de code ».
+// Liste des identités disponibles : security find-identity -v -p codesigning
+//
+// Avec une identité stable, macOS garde l'autorisation Accessibilité entre deux builds.
+CODE_SIGN_IDENTITY = Mon Certificat Auto-Signé

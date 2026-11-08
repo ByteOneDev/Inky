@@ -1,0 +1,6 @@
+#include "Shared.xcconfig"
+SWIFT_OPTIMIZATION_LEVEL = -O
+SWIFT_COMPILATION_MODE = wholemodule
+// Apple Silicon uniquement : WhisperKit s'appuie sur le Neural Engine, absent des Mac Intel.
+ARCHS = arm64
+ONLY_ACTIVE_ARCH = NO

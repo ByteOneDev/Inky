@@ -1,0 +1,69 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Inky — définition du projet Xcode (XcodeGen)
+#
+# Le fichier Inky.xcodeproj n'est PAS versionné : il est généré à partir de ce
+# fichier lisible avec `xcodegen generate`. Avantage : pas de conflits git sur
+# l'illisible project.pbxproj, et la config du projet se relit comme du code.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Inky
+
+options:
+  bundleIdPrefix: com.byteonedev
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+# Les réglages de build vivent dans des .xcconfig (plus faciles à commenter).
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+
+# Le code métier est dans un Swift Package local, découpé en modules.
+packages:
+  InkyKit:
+    path: Packages/InkyKit
+
+targets:
+  Inky:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+    dependencies:
+      - package: InkyKit
+        product: InkyCore
+      - package: InkyKit
+        product: InkyAudio
+      - package: InkyKit
+        product: InkyHotkeys
+      - package: InkyKit
+        product: InkyTranscription
+      - package: InkyKit
+        product: InkyInsertion
+      - package: InkyKit
+        product: InkyStorage
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleName: Inky
+        CFBundleDisplayName: Inky
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Application « agent » : pas d'icône dans le Dock, pas de barre de menus
+        # d'application. On vit uniquement dans la barre de menus système.
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.productivity
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSHumanReadableCopyright: "© 2026 ByteOneDev — MIT"
+        # Texte affiché par macOS dans la demande d'accès au micro.
+        NSMicrophoneUsageDescription: "Inky a besoin du micro pour transcrire ta voix. L'audio est traité localement sur ton Mac et n'est jamais envoyé sur Internet."
+
+schemes:
+  Inky:
+    build:
+      targets:
+        Inky: all
+    run:
+      config: Debug
+    archive:
+      config: Release
