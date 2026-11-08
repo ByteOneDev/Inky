@@ -19,6 +19,9 @@ public final class ModelManager {
     public private(set) var installed: Set<String> = []
     /// Progression (0…1) des téléchargements en cours, par identifiant.
     public private(set) var downloads: [String: Double] = [:]
+    /// Date de la dernière progression, par téléchargement : permet de repérer
+    /// un téléchargement bloqué (connexion coupée, serveur qui ne répond plus).
+    public private(set) var lastProgressAt: [String: Date] = [:]
     /// Dernière erreur, à afficher.
     public var lastError: String?
 
@@ -59,6 +62,7 @@ public final class ModelManager {
     public func download(_ modelID: String) {
         guard tasks[modelID] == nil else { return }
         downloads[modelID] = 0
+        lastProgressAt[modelID] = Date()
         lastError = nil
 
         tasks[modelID] = Task { [weak self] in
@@ -73,7 +77,11 @@ public final class ModelManager {
                         // Appelé sur un thread quelconque → on revient sur le MainActor.
                         let fraction = progress.fractionCompleted
                         Task { @MainActor in
-                            if self?.downloads[modelID] != nil { self?.downloads[modelID] = fraction }
+                            guard let self, let previous = self.downloads[modelID] else { return }
+                            if fraction != previous {
+                                self.downloads[modelID] = fraction
+                                self.lastProgressAt[modelID] = Date()
+                            }
                         }
                     }
                 )
@@ -93,6 +101,7 @@ public final class ModelManager {
                 self.logger.error("Échec du téléchargement : \(error.localizedDescription, privacy: .public)")
             }
             self.downloads[modelID] = nil
+            self.lastProgressAt[modelID] = nil
             self.tasks[modelID] = nil
             self.refresh()
         }
@@ -106,6 +115,14 @@ public final class ModelManager {
         if modelID.contains("base") { return .base }
         if modelID.contains("medium") { return .medium }
         return .tiny
+    }
+
+    /// Vrai si le téléchargement n'a pas progressé depuis `threshold` secondes.
+    /// Hugging Face reprend les fichiers partiels : annuler puis relancer repart
+    /// d'où on en était.
+    public func isStalled(_ modelID: String, now: Date = Date(), threshold: TimeInterval = 45) -> Bool {
+        guard let last = lastProgressAt[modelID] else { return false }
+        return now.timeIntervalSince(last) > threshold
     }
 
     public func cancelDownload(_ modelID: String) {

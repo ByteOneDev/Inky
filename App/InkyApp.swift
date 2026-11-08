@@ -38,6 +38,8 @@ final class AppModel {
     @ObservationIgnored private(set) lazy var windows = WindowCoordinator(app: self)
 
     init() {
+        Self.terminateOtherInstances()
+
         // Le nom des touches dans les réglages suit la disposition clavier active.
         KeyNames.characterProvider = { KeyboardLayout.character(for: $0)?.uppercased() }
 
@@ -58,6 +60,27 @@ final class AppModel {
         if needsOnboarding {
             Task { @MainActor [weak self] in self?.windows.show(.onboarding) }
         }
+    }
+}
+
+extension AppModel {
+    /// Une seule instance d'Inky à la fois : deux instances réagiraient toutes
+    /// les deux au raccourci et colleraient le texte deux fois (et se
+    /// disputeraient les téléchargements de modèles). La plus récente gagne :
+    /// c'est le comportement attendu après une mise à jour ou un lancement
+    /// depuis Xcode.
+    static func terminateOtherInstances() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0 != NSRunningApplication.current }
+        guard !others.isEmpty else { return }
+        for app in others { app.terminate() }
+        // Laisser jusqu'à 2 s aux autres instances pour se fermer proprement.
+        let deadline = Date().addingTimeInterval(2)
+        while others.contains(where: { !$0.isTerminated }) && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        for app in others where !app.isTerminated { app.forceTerminate() }
     }
 }
 

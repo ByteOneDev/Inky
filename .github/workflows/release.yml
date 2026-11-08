@@ -1,0 +1,89 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Release : à chaque tag « vX.Y.Z » poussé sur GitHub, on teste, on compile
+# l'app en Release et on publie un .zip sur la page Releases.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Signature : ad hoc (« - »), faute de compte Apple Developer. L'app n'est donc
+# pas notarisée : voir la section Installation du README.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:   # lancement manuel possible (sans publication)
+
+permissions:
+  contents: write      # nécessaire pour créer la release
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Choisir la dernière version stable de Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Installer XcodeGen
+        run: brew install xcodegen
+
+      - name: Tests unitaires
+        working-directory: Packages/InkyKit
+        run: swift test
+
+      - name: Générer le projet Xcode
+        run: xcodegen generate
+
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compiler (Release, arm64, signature ad hoc)
+        run: |
+          xcodebuild \
+            -project Inky.xcodeproj \
+            -scheme Inky \
+            -configuration Release \
+            -derivedDataPath build/DerivedData \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            MARKETING_VERSION="${{ steps.version.outputs.value }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGN_IDENTITY=- \
+            build
+
+      - name: Empaqueter
+        id: package
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          cd build/DerivedData/Build/Products/Release
+          codesign --verify --deep --verbose=2 Inky.app
+          # ditto préserve les attributs et la signature (contrairement à zip).
+          ditto -c -k --sequesterRsrc --keepParent Inky.app "Inky-$VERSION.zip"
+          shasum -a 256 "Inky-$VERSION.zip" | tee "Inky-$VERSION.zip.sha256"
+          echo "dir=$PWD" >> "$GITHUB_OUTPUT"
+
+      - name: Conserver l'artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Inky-${{ steps.version.outputs.value }}
+          path: ${{ steps.package.outputs.dir }}/Inky-*.zip*
+
+      - name: Publier la release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "${{ steps.package.outputs.dir }}"/Inky-*.zip* \
+            --title "Inky $GITHUB_REF_NAME" \
+            --notes-file docs/release-notes/$GITHUB_REF_NAME.md

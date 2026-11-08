@@ -47,7 +47,17 @@ struct OnboardingView: View {
                 models.download(settings.selectedModelID)
             }
             if let progress = models.downloads[settings.selectedModelID] {
-                ProgressView(value: progress).padding(.leading, 44)
+                VStack(alignment: .leading, spacing: 4) {
+                    ProgressView(value: progress)
+                    DownloadStallHint(models: models, modelID: settings.selectedModelID)
+                    if models.isStalled(settings.selectedModelID) {
+                        Button("Annuler le téléchargement") { models.cancelDownload(settings.selectedModelID) }
+                    }
+                }
+                .padding(.leading, 44)
+            }
+            if let error = models.lastError {
+                Text(error).font(.caption).foregroundStyle(.red).padding(.leading, 44)
             }
 
             if permissions.accessibility == false {

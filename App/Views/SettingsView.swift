@@ -179,6 +179,7 @@ private struct ModelRow: View {
                 Text("\(info.summary) — \(info.sizeMB) Mo").font(.caption).foregroundStyle(.secondary)
                 if let progress = models.downloads[info.id] {
                     ProgressView(value: progress).controlSize(.small)
+                    DownloadStallHint(models: models, modelID: info.id)
                 }
             }
             Spacer()
@@ -262,5 +263,22 @@ private struct AboutView: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// Message affiché si un téléchargement ne progresse plus.
+/// `TimelineView` redessine la vue toutes les 5 s pour réévaluer la condition.
+struct DownloadStallHint: View {
+    let models: ModelManager
+    let modelID: String
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 5)) { context in
+            if models.isStalled(modelID, now: context.date) {
+                Text("Le téléchargement semble bloqué. Annule puis relance : il reprendra où il en était.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
     }
 }
