@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Xcode — le .xcodeproj est GÉNÉRÉ par XcodeGen depuis project.yml : on ne le versionne pas.
+*.xcodeproj
+xcuserdata/
+DerivedData/
+build/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/InkyKit/Package.resolved.bak
+
+# Réglages de signature propres à ta machine (voir Config/Local.xcconfig.example)
+Config/Local.xcconfig
