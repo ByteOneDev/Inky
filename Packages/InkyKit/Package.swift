@@ -19,6 +19,7 @@ let package = Package(
         .library(name: "InkyTranscription", targets: ["InkyTranscription"]),
         .library(name: "InkyInsertion", targets: ["InkyInsertion"]),
         .library(name: "InkyStorage", targets: ["InkyStorage"]),
+        .library(name: "InkyUpdates", targets: ["InkyUpdates"]),
     ],
     dependencies: [
         // Transcription Whisper via CoreML (Argmax, licence MIT).
@@ -51,9 +52,14 @@ let package = Package(
             .product(name: "GRDB", package: "GRDB.swift"),
         ]),
 
+        // Mises à jour automatiques depuis les releases GitHub.
+        .target(name: "InkyUpdates"),
+
         .testTarget(name: "InkyCoreTests", dependencies: ["InkyCore"]),
         .testTarget(name: "InkyHotkeysTests", dependencies: ["InkyHotkeys"]),
         .testTarget(name: "InkyStorageTests", dependencies: ["InkyStorage"]),
         .testTarget(name: "InkyAudioTests", dependencies: ["InkyAudio"]),
+        .testTarget(name: "InkyInsertionTests", dependencies: ["InkyInsertion"]),
+        .testTarget(name: "InkyUpdatesTests", dependencies: ["InkyUpdates"]),
     ]
 )

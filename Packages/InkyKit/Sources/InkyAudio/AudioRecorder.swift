@@ -36,8 +36,13 @@ public enum AudioRecorderError: LocalizedError {
 /// Les callbacks audio arrivent sur un thread temps réel : l'état partagé est
 /// protégé par un verrou (`OSAllocatedUnfairLock`), d'où `@unchecked Sendable`.
 public final class AudioRecorder: @unchecked Sendable {
-    /// Niveau sonore normalisé (0…1), appelé ~50 fois par seconde sur un thread audio.
+    /// Niveau sonore normalisé (0…1), appelé ~20 fois par seconde sur un thread audio.
     public var onLevel: (@Sendable (Float) -> Void)?
+
+    /// Appelé une fois, au premier tampon audio reçu, avec le délai écoulé depuis
+    /// `start()`. C'est le vrai moment où l'on peut parler : avant, le micro
+    /// n'enregistre pas encore (c'est ce qui coupe parfois la 1re syllabe).
+    public var onReady: (@Sendable (TimeInterval) -> Void)?
 
     private var engine: AVAudioEngine?
     private let samples = OSAllocatedUnfairLock(initialState: [Float]())
@@ -84,6 +89,8 @@ public final class AudioRecorder: @unchecked Sendable {
         }
 
         let targetFormat = self.targetFormat
+        let startedAt = Date()
+        nonisolated(unsafe) var announcedReady = false
         // Le convertisseur est créé à partir du format RÉEL du premier tampon reçu
         // (et recréé s'il change) : juste après un changement de micro, le format
         // annoncé par le nœud peut encore être celui de l'ancien périphérique.
@@ -93,6 +100,10 @@ public final class AudioRecorder: @unchecked Sendable {
 
         input.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let self else { return }
+            if !announcedReady {
+                announcedReady = true
+                self.onReady?(Date().timeIntervalSince(startedAt))
+            }
             if converter == nil || converter?.inputFormat != buffer.format {
                 converter = AVAudioConverter(from: buffer.format, to: targetFormat)
             }
