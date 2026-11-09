@@ -36,7 +36,12 @@ xcodebuild -quiet \
 
 APP=build/release/Build/Products/Release/Inky.app
 codesign --verify --deep --strict "$APP"
-echo "▶︎ Signature : $(codesign -dv "$APP" 2>&1 | grep -m1 Authority || echo 'ad hoc')"
+SIGNATURE_INFO="$(codesign -dvv "$APP" 2>&1)"
+if [[ "$SIGNATURE_INFO" == *"Authority="* ]]; then
+  echo "▶︎ Signature : ${${SIGNATURE_INFO#*Authority=}%%$'\n'*}"
+else
+  echo "▶︎ Signature : ad hoc (pas de certificat dans Config/Local.xcconfig)"
+fi
 
 echo "▶︎ Archive"
 mkdir -p dist

@@ -9,8 +9,15 @@ relâches : le texte apparaît là où se trouve ton curseur, dans n'importe que
   moins d'une seconde sur Apple Silicon.
 - 🇫🇷🇬🇧 **Français par défaut**, anglais ou détection automatique en option. Les mots
   anglais glissés dans une phrase française sont bien transcrits.
-- 🧹 **Nettoyage** des hésitations (« euh ») et des hallucinations connues de Whisper.
+- 🧹 **Mise en forme automatique** : hésitations retirées, auto-corrections orales
+  (« 14 h, non plutôt 15 h » → « 15 h »), commandes vocales (« à la ligne »,
+  « point d'interrogation »), listes numérotées, pas de point final dans les messageries.
+- 📖 **Dictionnaire personnel** : mots à reconnaître, corrections automatiques et
+  **snippets** (« mon adresse mail » → ton adresse complète).
 - 🗂 **Historique local** consultable, avec réécoute et suppression automatique réglable.
+- 🔄 **Mises à jour automatiques** depuis les releases GitHub, vérifiées (SHA-256 et
+  signature). Désactivables.
+- 🎓 **Tutoriel** interactif avec zone d'entraînement.
 
 > Projet personnel, gratuit, sous licence MIT. Inspiré par Wispr Flow, Superwhisper et
 > VoiceInk (aucun code n'en est repris).
@@ -26,8 +33,11 @@ relâches : le texte apparaît là où se trouve ton curseur, dans n'importe que
 Les deux raccourcis se changent dans **Réglages › Général** (modificateurs seuls ou
 combinaison avec une touche, par ex. ⌥Espace).
 
-Une pastille discrète (en bas de l'écran par défaut, position réglable) affiche la
-forme d'onde pendant l'enregistrement, puis l'état de la transcription.
+Une petite pastille reste visible en bas de l'écran, même au-dessus des apps en plein
+écran (clic = dictée mains libres). Pendant une dictée, elle affiche **« Attends… »**
+(jaune) le temps que le micro démarre, puis la forme d'onde et la durée (rouge) :
+parle quand elle est rouge. Tout se désactive dans les réglages, et le menu permet de
+mettre Inky en pause.
 
 ## Installation (release)
 
@@ -55,7 +65,7 @@ forme d'onde pendant l'enregistrement, puis l'état de la transcription.
 | Modèle recommandé (Large v3 Turbo compressé) | 626 Mo | ~0,8 à 1,2 Go |
 | Cache CoreML (optimisation pour ta puce, créé au 1er chargement) | ~0,3 à 0,6 Go | — |
 | Historique (texte + audio AAC ~4 Ko/s) | quelques Mo par mois | — |
-| **Total v0.1** | **≈ 1 à 1,3 Go** | **≈ 1 Go** |
+| **Total** | **≈ 1 à 1,3 Go** | **≈ 1 Go** |
 
 Modèles plus légers disponibles : *Small compressé* (217 Mo), *Base* (146 Mo), *Tiny*
 (76 Mo). La v0.2 (reformulation par LLM local via Ollama) ajoutera un modèle de 2 à
@@ -65,6 +75,9 @@ Pour tout supprimer : quitter Inky, supprimer l'app et le dossier
 `~/Library/Application Support/Inky/`.
 
 ## Compiler depuis les sources
+
+Publier une release depuis ton Mac : `scripts/release.sh 0.2.0` (tests, compilation,
+signature avec le certificat de `Local.xcconfig`, archive + SHA-256, release GitHub).
 
 Prérequis : macOS 14+, Apple Silicon, Xcode 16+ et [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
@@ -98,10 +111,11 @@ whisper.cpp / WhisperKit dans [docs/benchmark.md](docs/benchmark.md).
 ## Feuille de route
 
 - **v0.1** : dictée locale, raccourcis, pastille, gestionnaire de modèles, historique.
-- **v0.2** : reformulation par LLM (Ollama en local, API en option), modes par app/URL,
-  dictionnaire personnel, détection de langue améliorée.
-- **Plus tard** : transcription de fichiers, mode commande, autres moteurs (Parakeet,
-  SpeechAnalyzer d'Apple), mises à jour via Sparkle.
+- **v0.2** : mise en forme (auto-corrections, commandes vocales, listes), dictionnaire et
+  snippets, pastille permanente, tutoriel, mises à jour automatiques.
+- **v0.3** : reformulation par LLM (Ollama en local, API en option), modes par app/URL.
+- **Plus tard** : transcription de fichiers, mode commande, autres moteurs (whisper.cpp,
+  Parakeet, SpeechAnalyzer d'Apple).
 
 ## Licence
 

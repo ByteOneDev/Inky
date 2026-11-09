@@ -37,7 +37,10 @@ où se trouve le curseur, dans n'importe quelle app.
 | Signature | Ad hoc en CI, certificat auto-signé stable en local | Pas de compte Apple Developer payant → pas de notarisation. Voir « Pièges ». |
 | Architecture CPU | arm64 uniquement | Le Neural Engine n'existe que sur Apple Silicon. |
 | Langue | Français par défaut, anglais et détection auto en option | L'utilisateur mélange FR/EN ; pas de modèles `.en`. |
-| Mises à jour | Sparkle **plus tard** (après la v0.1), vérification opt-in | Cohérent avec « pas de télémétrie ». |
+| Mises à jour | Module maison `InkyUpdates` (API GitHub Releases), pas Sparkle | Pas d'appcast ni de clé EdDSA à gérer. Vérification : HTTPS + SHA-256 + **même certificat** que l'app installée (si elle n'est pas ad hoc). Désactivable. |
+| Releases | `scripts/release.sh X.Y.Z` en local (signature stable) ; workflow GitHub Actions en secours | Le compte GitHub ne peut pas lancer de runners macOS (facturation). La signature locale stable évite de perdre l'Accessibilité à chaque mise à jour. |
+| Mise en forme | Règles locales, sans IA (`InkyCore/Formatting`) | Hésitations, auto-corrections orales, commandes vocales, listes, dictionnaire, style messagerie. Le LLM (v0.3) viendra en complément. |
+| Dictionnaire | Fichier JSON `dictionary.json` | Lisible, facile à sauvegarder et à éditer à la main. |
 
 ## Architecture
 
@@ -62,8 +65,11 @@ où se trouve le curseur, dans n'importe quelle app.
 │  Machine (pure)    AudioDevices   ModelCatalog        KeyboardLayout  + fichiers    │
 │                    AudioFileWriter                                    audio .m4a    │
 │                                                                                     │
+│  InkyUpdates : SemanticVersion · UpdateClient (GitHub) · UpdateInstaller            │
 │                         InkyCore : protocoles + types partagés                       │
-│      TranscriptionEngine · TextInserter · TextProcessor · AudioClip · TextCleanup   │
+│      TranscriptionEngine · TextInserter · TextProcessor · AudioClip                 │
+│      Formatting/ : TextPipeline = TextCleanup → SelfCorrection → VoiceCommands      │
+│                    → ListFormatter → Replacements → style messagerie                │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -72,13 +78,14 @@ où se trouve le curseur, dans n'importe quelle app.
 1. `InkyHotkeys` reçoit les événements clavier globaux via un `CGEventTap`, les passe
    à `HotkeyStateMachine` (logique pure, testée) qui émet `pushToTalkBegan`,
    `pushToTalkEnded`, `handsFreeToggled` ou `cancel`.
-2. `DictationController` démarre `AudioRecorder` : `AVAudioEngine` capture le micro
-   choisi, convertit à la volée en **16 kHz mono Float32** (format attendu par Whisper)
-   et publie le niveau sonore pour la pastille.
+2. `DictationController` passe en `preparing` (pastille jaune « Attends… ») et
+   démarre `AudioRecorder` : `AVAudioEngine` capture le micro choisi et convertit à la
+   volée en **16 kHz mono Float32**. Au **premier tampon reçu** (`onReady`), on passe
+   en `recording` (pastille rouge, chronomètre) : c'est le signal pour parler.
 3. À l'arrêt, on obtient un `AudioClip`. Trop court (< 0,3 s) ou silencieux → ignoré.
 4. `TranscriptionEngine` (WhisperKit, modèle **déjà chargé et préchauffé**) transcrit.
-5. `TextCleanup` (un `TextProcessor`) nettoie : espaces, hésitations (« euh »),
-   hallucinations connues de Whisper sur le silence.
+5. `TextPipeline` met en forme selon les réglages et le dictionnaire, en tenant compte
+   de l'app cible ; puis l'espacement intelligent lit le caractère avant le curseur (AX).
 6. `TextInserter` colle le texte dans l'app active puis restaure le presse-papier.
 7. `HistoryStore` enregistre l'entrée (et l'audio si l'option est activée).
 
@@ -88,8 +95,6 @@ où se trouve le curseur, dans n'importe quelle app.
   après `TextCleanup`.
 - **Modes** : un type `DictationMode` (modèle, langue, prompt, règles d'activation)
   résolu par le contrôleur au début de la dictée selon l'app au premier plan.
-- **Dictionnaire** : `promptTokens` de WhisperKit (biais du vocabulaire) +
-  remplacements post-transcription dans un `TextProcessor`.
 - **Autre moteur** (whisper.cpp, Parakeet, SpeechAnalyzer) : une nouvelle conformité à
   `TranscriptionEngine`.
 
@@ -129,15 +134,23 @@ où se trouve le curseur, dans n'importe quelle app.
   push-to-talk, l'enregistrement est **annulé** et la touche passe normalement.
 - **Bluetooth.** Utiliser le micro d'AirPods bascule le casque en profil « appel »
   (son dégradé). Préférer le micro intégré.
-- **Démarrage du micro.** `AVAudioEngine` met ~50 à 200 ms à démarrer : la toute
-  première syllabe peut être coupée si on parle avant d'appuyer.
+- **Démarrage du micro.** `AVAudioEngine` met ~50 à 200 ms à démarrer (bien plus en
+  Bluetooth). D'où l'état « Attends… » de la pastille et la mesure affichée dans
+  Réglages › Audio › Diagnostic.
+- **Fenêtres créées trop tôt.** `AppModel.init` s'exécute pendant que SwiftUI construit
+  la scène : y créer une fenêtre (la pastille) fait planter SwiftUI (réentrance).
+  Tout ce qui touche à l'AppKit démarre dans une `Task` au tour suivant.
+- **Deux instances.** Deux Inky en même temps colleraient le texte deux fois : au
+  lancement, Inky ferme les autres instances.
+- **Mise à jour et TCC.** L'autorisation Accessibilité survit à une mise à jour
+  seulement si la nouvelle version est signée par le même certificat.
 
 ## Conventions
 
 - Swift 6 (concurrence stricte). L'UI et l'orchestration sont `@MainActor` ; les
   moteurs sont des `actor`.
 - Pas de dépendance tierce sans l'inscrire dans le tableau ci-dessus.
-  Actuelles : WhisperKit (MIT), GRDB (MIT).
+  Actuelles : WhisperKit (MIT), GRDB (MIT). Pas de Sparkle (voir Mises à jour).
 - Les tests de logique pure vivent dans `Packages/InkyKit/Tests` : `swift test`.
 - Un commit par jalon minimum, messages en français.
 
@@ -147,6 +160,7 @@ où se trouve le curseur, dans n'importe quelle app.
 xcodegen generate                                   # régénère Inky.xcodeproj
 xcodebuild -scheme Inky -configuration Debug build  # compile
 cd Packages/InkyKit && swift test                   # tests unitaires
+scripts/release.sh 0.2.0                            # compile, signe, publie la release
 ```
 
 ## Emplacements des données
@@ -154,4 +168,5 @@ cd Packages/InkyKit && swift test                   # tests unitaires
 - Réglages : `UserDefaults` (domaine `com.byteonedev.inky`)
 - Modèles : `~/Library/Application Support/Inky/Models/`
 - Historique : `~/Library/Application Support/Inky/history.sqlite`
+- Dictionnaire : `~/Library/Application Support/Inky/dictionary.json`
 - Audio de l'historique : `~/Library/Application Support/Inky/Audio/`
