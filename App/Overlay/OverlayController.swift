@@ -8,16 +8,29 @@ import SwiftUI
 @Observable
 final class OverlayModel {
     enum Phase: Equatable {
-        case recording(handsFree: Bool)
+        /// Au repos : petite pastille discrète (si « toujours visible » est activé).
+        case idle
+        /// Raccourci pressé, le micro démarre : « Attends… ». Parler maintenant
+        /// risquerait de couper la première syllabe.
+        case preparing
+        /// Le micro enregistre vraiment : forme d'onde + chronomètre.
+        case recording(handsFree: Bool, startedAt: Date)
         case transcribing
         case message(String, isError: Bool)
+
+        var isCompact: Bool { self == .idle }
     }
 
-    var phase: Phase = .transcribing
-    /// Historique glissant des niveaux sonores (0…1), un par barre de la forme d'onde.
+    var phase: Phase = .idle
+    var showsTimer = true
+    /// Raccourci affiché dans l'infobulle de la pastille au repos.
+    var hint = ""
+    /// Historique glissant des niveaux sonores (0…1), un par barre.
     var levels: [Float] = Array(repeating: 0, count: OverlayModel.barCount)
+    /// Clic sur la pastille (au repos : démarrer en mains libres ; en cours : arrêter).
+    var onClick: (() -> Void)?
 
-    static let barCount = 24
+    static let barCount = 20
 
     func push(level: Float) {
         levels.removeFirst()
@@ -33,71 +46,125 @@ final class OverlayModel {
 ///
 /// C'est un `NSPanel` très particulier :
 /// - **non activant** : il ne prend jamais le focus clavier. Indispensable, sinon
-///   notre ⌘V collerait le texte… dans la pastille elle-même !
-/// - **sur tous les Spaces et au-dessus des apps en plein écran**
-///   (`.canJoinAllSpaces` + `.fullScreenAuxiliary`) ;
-/// - **transparent aux clics** (`ignoresMouseEvents`) : il ne gêne pas.
+///   notre ⌘V collerait le texte… dans la pastille elle-même ! On peut quand
+///   même cliquer dessus : le clic n'active pas Inky.
+/// - **sur tous les Spaces et par-dessus les apps en plein écran**
+///   (`.canJoinAllSpaces` + `.fullScreenAuxiliary`, niveau « barre d'état ») ;
+/// - il suit l'écran de la fenêtre active (plusieurs écrans).
 @MainActor
 final class OverlayController {
     let model = OverlayModel()
+
+    /// Réglages lus à chaque affichage (fournis par le contrôleur).
+    var position: OverlayPosition = .bottom
+    var showsWhileDictating = true
+    var alwaysVisible = true
+    var isEnabled = true
+
     private var panel: NSPanel?
     private var hideTask: Task<Void, Never>?
+    private var observers: [NSObjectProtocol] = []
 
-    private let size = CGSize(width: 220, height: 48)
+    static let compactSize = CGSize(width: 46, height: 14)
+    static let fullSize = CGSize(width: 232, height: 44)
     /// Marge par rapport aux bords de l'écran.
-    private let margin: CGFloat = 24
+    private let margin: CGFloat = 14
 
-    func show(_ phase: OverlayModel.Phase, position: OverlayPosition) {
-        hideTask?.cancel()
-        if case .recording = phase, model.phase != phase { model.resetLevels() }
-        model.phase = phase
-
-        let panel = self.panel ?? makePanel()
-        self.panel = panel
-        let screen = FrontWindowLocator.screenOfFrontmostWindow() ?? NSScreen.main ?? NSScreen.screens[0]
-        panel.setFrameOrigin(origin(for: position, on: screen))
-        panel.orderFrontRegardless() // afficher SANS activer l'app
+    init() {
+        // Repositionner quand l'utilisateur change d'app (donc peut-être d'écran)
+        // ou quand la configuration des écrans change.
+        let center = NSWorkspace.shared.notificationCenter
+        observers.append(center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reposition() }
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reposition() }
+        })
     }
 
-    /// Affiche un message puis cache la pastille après un délai.
-    func flash(_ text: String, isError: Bool = false, position: OverlayPosition, duration: Duration = .seconds(2.5)) {
-        show(.message(text, isError: isError), position: position)
+    /// Affiche une phase (ou cache la pastille selon les réglages).
+    func show(_ phase: OverlayModel.Phase) {
+        hideTask?.cancel()
+        if phase == .preparing { model.resetLevels() }
+        model.phase = phase
+        refresh()
+    }
+
+    /// Affiche un message, puis revient à l'état de repos.
+    func flash(_ text: String, isError: Bool = false, duration: Duration = .seconds(2.5)) {
+        show(.message(text, isError: isError))
         hideTask = Task { [weak self] in
             try? await Task.sleep(for: duration)
             guard !Task.isCancelled else { return }
-            self?.hide()
+            self?.show(.idle)
         }
     }
 
-    func hide() {
-        hideTask?.cancel()
-        panel?.orderOut(nil)
+    /// Retour au repos (pastille compacte ou rien).
+    func hide() { show(.idle) }
+
+    /// Applique les réglages courants : visible ou non, taille, position.
+    func refresh() {
+        let phase = model.phase
+        let visible: Bool
+        if !isEnabled {
+            // Inky désactivé : seuls les messages (ex. « Inky est en pause ») passent.
+            if case .message = phase { visible = true } else { visible = false }
+        } else if phase.isCompact {
+            visible = alwaysVisible
+        } else if case .message = phase {
+            visible = true // les erreurs doivent rester visibles même si la pastille est masquée
+        } else {
+            visible = showsWhileDictating
+        }
+
+        guard visible else {
+            panel?.orderOut(nil)
+            return
+        }
+        let panel = self.panel ?? makePanel()
+        self.panel = panel
+        // Clics utiles seulement au repos et pendant l'enregistrement.
+        switch phase {
+        case .idle, .recording, .preparing: panel.ignoresMouseEvents = false
+        default: panel.ignoresMouseEvents = true
+        }
+        reposition()
+        panel.orderFrontRegardless() // afficher SANS activer l'app
+    }
+
+    private func reposition() {
+        guard let panel else { return }
+        let size = model.phase.isCompact ? Self.compactSize : Self.fullSize
+        let screen = FrontWindowLocator.screenOfFrontmostWindow() ?? NSScreen.main ?? NSScreen.screens[0]
+        let frame = CGRect(origin: origin(for: position, size: size, on: screen), size: size)
+        if panel.frame != frame { panel.setFrame(frame, display: true) }
     }
 
     private func makePanel() -> NSPanel {
         let panel = NSPanel(
-            contentRect: CGRect(origin: .zero, size: size),
+            contentRect: CGRect(origin: .zero, size: Self.fullSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
         panel.isFloatingPanel = true
-        panel.level = .statusBar                 // au-dessus des fenêtres normales
+        panel.level = .statusBar                 // au-dessus des fenêtres et du plein écran
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false                  // l'ombre est dessinée par SwiftUI
-        panel.ignoresMouseEvents = true
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
-        panel.contentView = NSHostingView(rootView: OverlayView(model: model))
+        panel.isMovable = false
+        panel.contentView = ClickThroughHostingView(rootView: OverlayView(model: model))
         return panel
     }
 
-    /// Calcule le coin bas-gauche de la pastille. Attention : en Cocoa, l'origine
-    /// (0, 0) est en **bas** à gauche de l'écran principal, et `y` monte.
+    /// Calcule le coin bas-gauche de la pastille. En Cocoa, l'origine (0, 0) est
+    /// en **bas** à gauche de l'écran principal, et `y` monte.
     /// `visibleFrame` exclut la barre de menus et le Dock.
-    private func origin(for position: OverlayPosition, on screen: NSScreen) -> CGPoint {
+    private func origin(for position: OverlayPosition, size: CGSize, on screen: NSScreen) -> CGPoint {
         let f = screen.visibleFrame
         let left = f.minX + margin
         let centerX = f.midX - size.width / 2
@@ -117,6 +184,12 @@ final class OverlayController {
         case .bottomRight: return CGPoint(x: right, y: bottom)
         }
     }
+}
+
+/// Vue hôte qui accepte le « premier clic » : sans ça, le premier clic sur une
+/// fenêtre d'une app inactive sert seulement à… l'activer.
+private final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 /// Trouve l'écran qui contient la fenêtre active de l'app au premier plan.

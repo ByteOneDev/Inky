@@ -70,9 +70,10 @@ struct OnboardingView: View {
                 Text("Push-to-talk : maintiens \(settings.pushToTalkShortcut.displayString). Mains libres : appuie sur \(settings.handsFreeShortcut.displayString).")
                     .font(.callout)
                 Spacer()
-                Button("Terminer") {
+                Button(settings.hasSeenTutorial ? "Terminer" : "Terminer et suivre le tutoriel") {
                     settings.hasCompletedOnboarding = true
                     app.windows.close(.onboarding)
+                    if !settings.hasSeenTutorial { app.windows.show(.tutorial) }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!permissions.allGranted)

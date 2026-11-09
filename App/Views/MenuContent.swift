@@ -8,13 +8,18 @@ struct MenuContent: View {
     private var controller: DictationController { app.controller }
 
     var body: some View {
+        @Bindable var settings = app.settings
+
         Text(statusText)
 
         if !app.permissions.allGranted {
             Button("⚠︎ Autorisations manquantes…") { app.windows.show(.onboarding) }
         }
 
-        Text("Push-to-talk : \(app.settings.pushToTalkShortcut.displayString)   ·   Mains libres : \(app.settings.handsFreeShortcut.displayString)")
+        // Interrupteur général : met Inky en pause (raccourcis et pastille).
+        Toggle("Inky activé", isOn: $settings.isEnabled)
+
+        Text("Push-to-talk : \(settings.pushToTalkShortcut.displayString)   ·   Mains libres : \(settings.handsFreeShortcut.displayString)")
 
         Divider()
 
@@ -26,6 +31,26 @@ struct MenuContent: View {
         }
         Button("Historique…") { app.windows.show(.history) }
             .keyboardShortcut("h")
+
+        Menu("Pastille") {
+            Toggle("Toujours visible (même en plein écran)", isOn: $settings.overlayAlwaysVisible)
+            Toggle("Afficher pendant la dictée", isOn: $settings.overlayEnabled)
+        }
+
+        Divider()
+
+        if let update = app.updates.availableUpdate {
+            Button("⬆︎ Installer la version \(update.version.description)…") {
+                Task { await app.updates.install(update) }
+            }
+            .disabled(!app.updates.canInstall)
+        } else {
+            Button("Rechercher des mises à jour…") {
+                Task { await app.updates.check(userInitiated: true) }
+                app.windows.show(.settings)
+            }
+        }
+        Button("Tutoriel…") { app.windows.show(.tutorial) }
         Button("Réglages…") { app.windows.show(.settings) }
             .keyboardShortcut(",")
 
@@ -36,7 +61,9 @@ struct MenuContent: View {
     }
 
     private var statusText: String {
+        if !app.settings.isEnabled { return "En pause" }
         switch controller.phase {
+        case .preparing: return "Démarrage du micro…"
         case .recording: return "● Enregistrement…"
         case .transcribing: return "Transcription…"
         case .idle: break

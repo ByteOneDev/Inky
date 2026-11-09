@@ -37,6 +37,10 @@ enum OverlayPosition: String, Codable, CaseIterable, Identifiable {
 final class AppSettings {
     @ObservationIgnored private let defaults: UserDefaults
 
+    // — Interrupteur général —
+    /// Faux : Inky ne réagit plus aux raccourcis et la pastille disparaît.
+    var isEnabled: Bool { didSet { defaults.set(isEnabled, forKey: Keys.enabled) } }
+
     // — Raccourcis —
     var pushToTalkShortcut: Shortcut { didSet { save(pushToTalkShortcut, Keys.pushToTalk) } }
     var handsFreeShortcut: Shortcut { didSet { save(handsFreeShortcut, Keys.handsFree) } }
@@ -49,7 +53,11 @@ final class AppSettings {
     // — Transcription —
     var selectedModelID: String { didSet { defaults.set(selectedModelID, forKey: Keys.model) } }
     var language: DictationLanguage { didSet { save(language, Keys.language) } }
-    var removeFillers: Bool { didSet { defaults.set(removeFillers, forKey: Keys.removeFillers) } }
+
+    // — Mise en forme —
+    var formatting: FormattingOptions { didSet { save(formatting, Keys.formatting) } }
+    /// Ajouter une espace si on dicte juste après un mot.
+    var smartSpacing: Bool { didSet { defaults.set(smartSpacing, forKey: Keys.smartSpacing) } }
 
     // — Insertion —
     var restoreClipboard: Bool { didSet { defaults.set(restoreClipboard, forKey: Keys.restoreClipboard) } }
@@ -58,29 +66,48 @@ final class AppSettings {
 
     // — Pastille —
     var overlayPosition: OverlayPosition { didSet { save(overlayPosition, Keys.overlayPosition) } }
+    /// Afficher la pastille pendant l'enregistrement et la transcription.
+    var overlayEnabled: Bool { didSet { defaults.set(overlayEnabled, forKey: Keys.overlayEnabled) } }
+    /// Garder une petite pastille visible au repos (y compris en plein écran).
+    var overlayAlwaysVisible: Bool { didSet { defaults.set(overlayAlwaysVisible, forKey: Keys.overlayAlways) } }
+    /// Afficher la durée de l'enregistrement dans la pastille.
+    var overlayShowsTimer: Bool { didSet { defaults.set(overlayShowsTimer, forKey: Keys.overlayTimer) } }
 
     // — Historique —
     var historyRetention: HistoryRetention { didSet { save(historyRetention, Keys.retention) } }
     var keepAudio: Bool { didSet { defaults.set(keepAudio, forKey: Keys.keepAudio) } }
 
+    // — Mises à jour —
+    var autoCheckUpdates: Bool { didSet { defaults.set(autoCheckUpdates, forKey: Keys.autoCheck) } }
+    var autoInstallUpdates: Bool { didSet { defaults.set(autoInstallUpdates, forKey: Keys.autoInstall) } }
+
     // — Premier lancement —
     var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: Keys.onboarding) } }
+    var hasSeenTutorial: Bool { didSet { defaults.set(hasSeenTutorial, forKey: Keys.tutorial) } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        isEnabled = defaults.object(forKey: Keys.enabled) as? Bool ?? true
         pushToTalkShortcut = Self.load(Keys.pushToTalk, from: defaults) ?? .defaultPushToTalk
         handsFreeShortcut = Self.load(Keys.handsFree, from: defaults) ?? .defaultHandsFree
         inputDeviceUID = defaults.string(forKey: Keys.inputDevice)
         playSounds = defaults.object(forKey: Keys.playSounds) as? Bool ?? true
         selectedModelID = defaults.string(forKey: Keys.model) ?? ModelCatalog.recommended.id
         language = Self.load(Keys.language, from: defaults) ?? .french
-        removeFillers = defaults.object(forKey: Keys.removeFillers) as? Bool ?? true
+        formatting = Self.load(Keys.formatting, from: defaults) ?? FormattingOptions()
+        smartSpacing = defaults.object(forKey: Keys.smartSpacing) as? Bool ?? true
         restoreClipboard = defaults.object(forKey: Keys.restoreClipboard) as? Bool ?? true
         restoreDelayMs = defaults.object(forKey: Keys.restoreDelay) as? Int ?? 350
         overlayPosition = Self.load(Keys.overlayPosition, from: defaults) ?? .bottom
+        overlayEnabled = defaults.object(forKey: Keys.overlayEnabled) as? Bool ?? true
+        overlayAlwaysVisible = defaults.object(forKey: Keys.overlayAlways) as? Bool ?? true
+        overlayShowsTimer = defaults.object(forKey: Keys.overlayTimer) as? Bool ?? true
+        autoCheckUpdates = defaults.object(forKey: Keys.autoCheck) as? Bool ?? true
+        autoInstallUpdates = defaults.object(forKey: Keys.autoInstall) as? Bool ?? false
         historyRetention = Self.load(Keys.retention, from: defaults) ?? .oneMonth
         keepAudio = defaults.object(forKey: Keys.keepAudio) as? Bool ?? true
         hasCompletedOnboarding = defaults.bool(forKey: Keys.onboarding)
+        hasSeenTutorial = defaults.bool(forKey: Keys.tutorial)
     }
 
     // MARK: - Persistance des types complexes (encodés en JSON)
@@ -101,7 +128,15 @@ final class AppSettings {
         static let playSounds = "audio.playSounds"
         static let model = "transcription.model"
         static let language = "transcription.language"
-        static let removeFillers = "transcription.removeFillers"
+        static let enabled = "general.enabled"
+        static let formatting = "formatting.options"
+        static let smartSpacing = "formatting.smartSpacing"
+        static let overlayEnabled = "overlay.enabled"
+        static let overlayAlways = "overlay.alwaysVisible"
+        static let overlayTimer = "overlay.showsTimer"
+        static let autoCheck = "updates.autoCheck"
+        static let autoInstall = "updates.autoInstall"
+        static let tutorial = "tutorial.seen"
         static let restoreClipboard = "insertion.restoreClipboard"
         static let restoreDelay = "insertion.restoreDelayMs"
         static let overlayPosition = "overlay.position"

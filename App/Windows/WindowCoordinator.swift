@@ -10,13 +10,14 @@ import SwiftUI
 @MainActor
 final class WindowCoordinator: NSObject, NSWindowDelegate {
     enum Kind: String {
-        case settings, history, onboarding
+        case settings, history, onboarding, tutorial
 
         var title: String {
             switch self {
             case .settings: "Réglages d'Inky"
             case .history: "Historique"
             case .onboarding: "Bienvenue dans Inky"
+            case .tutorial: "Tutoriel Inky"
             }
         }
     }
@@ -46,6 +47,7 @@ final class WindowCoordinator: NSObject, NSWindowDelegate {
         case .settings: AnyView(SettingsView(app: app))
         case .history: AnyView(HistoryView(app: app))
         case .onboarding: AnyView(OnboardingView(app: app))
+        case .tutorial: AnyView(TutorialView(app: app))
         }
         let window = NSWindow(contentViewController: NSHostingController(rootView: root))
         window.title = kind.title

@@ -34,6 +34,8 @@ final class AppModel {
     let settings = AppSettings()
     let permissions = PermissionsManager()
     let models = ModelManager()
+    let vocabulary = VocabularyStore()
+    let updates: UpdateManager
     let controller: DictationController
     @ObservationIgnored private(set) lazy var windows = WindowCoordinator(app: self)
 
@@ -51,8 +53,17 @@ final class AppModel {
             history = nil
         }
 
-        controller = DictationController(settings: settings, permissions: permissions, models: models, history: history)
-        controller.start()
+        controller = DictationController(settings: settings, permissions: permissions, models: models, vocabulary: vocabulary, history: history)
+        updates = UpdateManager(settings: settings)
+
+        // Attention : cet `init` s'exécute PENDANT que SwiftUI construit
+        // l'interface (valeur initiale d'un @State). Créer des fenêtres ici
+        // (la pastille !) ferait réentrer SwiftUI dans sa propre mise à jour :
+        // plantage. On démarre donc au tour suivant de la boucle d'événements.
+        Task { @MainActor [controller, updates] in
+            controller.start()
+            updates.startAutomaticChecks()
+        }
 
         // Premier lancement, ou autorisation perdue (ex. après une mise à jour
         // non signée) : on affiche l'écran d'accueil.
@@ -90,7 +101,8 @@ extension DictationController {
         switch phase {
         case .recording: "waveform.circle.fill"
         case .transcribing: "ellipsis.circle"
-        case .idle: hotkeysActive ? "waveform" : "waveform.slash"
+        case .preparing: "waveform.circle"
+        case .idle: hotkeysActive && settings.isEnabled ? "waveform" : "waveform.slash"
         }
     }
 }

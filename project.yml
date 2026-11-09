@@ -42,6 +42,8 @@ targets:
         product: InkyInsertion
       - package: InkyKit
         product: InkyStorage
+      - package: InkyKit
+        product: InkyUpdates
     info:
       path: App/Info.plist
       properties:
