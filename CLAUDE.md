@@ -43,6 +43,7 @@ où se trouve le curseur, dans n'importe quelle app.
 | Dictionnaire | Fichier JSON `dictionary.json` | Lisible, facile à sauvegarder et à éditer à la main. |
 | IA (LLM) | **Apple Intelligence** (`FoundationModels`, module `InkyLLM`) derrière le protocole `LanguageModelProvider` | Local, 0 Mo à télécharger, parle français. Exige macOS 26+ et Apple Intelligence activé ; sinon repli : le texte dicté est inséré tel quel. Ollama ou une API pourront s'ajouter comme autre conformité. |
 | Prompts IA | Phrase déclencheuse **au début** de la dictée + consigne écrite à l'avance (`PromptTemplate`, `templates.json`) | Pas de raccourci en plus à retenir. Option « lire le texte déjà écrit » (AX) pour compléter un mail. |
+| Pause musique / vidéo | Commande « pause » / « lecture » du système via le framework privé `MediaRemote` (chargé avec `dlopen`), détection par CoreAudio (`kAudioProcessPropertyIsRunningOutput`) | Seul moyen de couvrir Musique, Spotify et les vidéos des navigateurs. On ne relance que si un processus qui jouait s'est arrêté après notre pause. |
 | Statistiques | Table SQLite `usage` séparée de l'historique, **sans texte** | Doit survivre à la purge de l'historique ; ne garde que mots, durée, app. Calcul pur dans `UsageSummary` (testé). |
 | Interface | Fenêtre principale à barre latérale (style Wispr Flow) + pastille au choix : capsule, magnétoscope ou radio (4 finitions), ces deux derniers rangés contre le bord de l'écran | Une seule fenêtre pour accueil/stats, historique, dictionnaire, snippets, prompts IA, style et réglages. Thème dans `App/Design/Theme.swift`. |
 
@@ -162,6 +163,11 @@ où se trouve le curseur, dans n'importe quelle app.
 - **Apple Intelligence.** `SystemLanguageModel.default.availability` peut valoir
   `modelNotReady` longtemps après l'activation (téléchargement du modèle par macOS).
   Contexte limité (~4 000 tokens) : on coupe le texte du champ à 6 000 caractères.
+- **MediaRemote.** Depuis macOS 15.4, une app tierce ne peut plus demander « quelque
+  chose joue-t-il ? » (réponse toujours fausse) ; envoyer des commandes marche encore.
+  Un navigateur met ~8 s à libérer sa sortie audio après une pause : d'où la
+  surveillance de 12 s dans `MediaPlayback`. Des apps gardent une sortie ouverte en
+  permanence (égaliseurs, jeux) : elles ne déclenchent jamais de reprise.
 - **Locale.** L'app n'a pas de `.lproj` : `CFBundleDevelopmentRegion = fr` (project.yml)
   pour que dates et jours soient en français.
 - **Mise à jour et TCC.** L'autorisation Accessibilité survit à une mise à jour

@@ -18,6 +18,8 @@ relâches : le texte apparaît là où se trouve ton curseur, dans n'importe que
   engineering », « mail pro », « complète »…) et l'IA d'Apple, **en local**, combine ta
   consigne écrite à l'avance avec ce que tu dis : prompt structuré, mail rédigé, suite
   d'un mail déjà commencé. Nécessite macOS 26+ et Apple Intelligence activé.
+- ⏸ **Pause automatique** de la musique et des vidéos pendant la dictée, reprise à la
+  fin (seulement si c'est Inky qui a mis en pause).
 - 📊 **Statistiques** : mots dictés, vitesse en mots par minute, temps gagné, série de
   jours, apps favorites. Calculées et stockées uniquement sur ton Mac.
 - 🗂 **Historique local** consultable, avec réécoute et suppression automatique réglable.

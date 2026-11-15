@@ -72,6 +72,7 @@ final class DictationController {
     @ObservationIgnored private let engine: any TranscriptionEngine
     @ObservationIgnored private let inserter: any TextInserter
     @ObservationIgnored private let recorder = AudioRecorder()
+    @ObservationIgnored private let media = MediaPlayback()
 
     // État d'une dictée en cours
     @ObservationIgnored private var recordingStartedAt: Date?
@@ -291,9 +292,12 @@ final class DictationController {
         // La pastille passe en « Attends… » AVANT de démarrer le micro.
         phase = .preparing(mode)
         overlay.show(.preparing)
+        // La musique ou la vidéo en cours se met en pause (relancée à la fin).
+        if settings.pauseMediaWhileDictating { media.pauseForDictation() }
         do {
             try recorder.start(deviceUID: settings.inputDeviceUID)
         } catch {
+            media.resumeAfterDictation()
             phase = .idle
             overlay.flash(error.localizedDescription, isError: true)
             return
@@ -355,6 +359,7 @@ final class DictationController {
     }
 
     private func endRecordingState() {
+        media.resumeAfterDictation()
         maxDurationTask?.cancel()
         maxDurationTask = nil
         hotkeys.stateMachine.escapeCancels = false

@@ -118,6 +118,14 @@ struct AudioSettings: View {
             Section("Retour sonore") {
                 Toggle("Jouer un son quand le micro est prêt et à la fin", isOn: $settings.playSounds)
             }
+            Section {
+                Toggle("Mettre en pause la musique et les vidéos pendant la dictée", isOn: $settings.pauseMediaWhileDictating)
+            } header: {
+                Text("Musique et vidéos")
+            } footer: {
+                Text("Musique, Spotify, YouTube… se mettent en pause quand tu commences à dicter et reprennent à la fin. Inky ne relance que ce qu'il a lui-même mis en pause. Avec une vidéo dans un navigateur, la reprise peut attendre quelques secondes après une dictée très courte.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .onAppear { devices = AudioDevices.inputDevices() }
     }

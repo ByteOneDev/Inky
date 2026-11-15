@@ -49,6 +49,8 @@ final class AppSettings {
     /// UID du micro choisi ; `nil` = micro par défaut du système.
     var inputDeviceUID: String? { didSet { defaults.set(inputDeviceUID, forKey: Keys.inputDevice) } }
     var playSounds: Bool { didSet { defaults.set(playSounds, forKey: Keys.playSounds) } }
+    /// Mettre en pause la musique / la vidéo en cours pendant la dictée.
+    var pauseMediaWhileDictating: Bool { didSet { defaults.set(pauseMediaWhileDictating, forKey: Keys.pauseMedia) } }
 
     // — Transcription —
     var selectedModelID: String { didSet { defaults.set(selectedModelID, forKey: Keys.model) } }
@@ -104,6 +106,7 @@ final class AppSettings {
         handsFreeShortcut = Self.load(Keys.handsFree, from: defaults) ?? .defaultHandsFree
         inputDeviceUID = defaults.string(forKey: Keys.inputDevice)
         playSounds = defaults.object(forKey: Keys.playSounds) as? Bool ?? true
+        pauseMediaWhileDictating = defaults.object(forKey: Keys.pauseMedia) as? Bool ?? true
         selectedModelID = defaults.string(forKey: Keys.model) ?? ModelCatalog.recommended.id
         language = Self.load(Keys.language, from: defaults) ?? .french
         formatting = Self.load(Keys.formatting, from: defaults) ?? FormattingOptions()
@@ -142,6 +145,7 @@ final class AppSettings {
         static let handsFree = "shortcut.handsFree"
         static let inputDevice = "audio.inputDeviceUID"
         static let playSounds = "audio.playSounds"
+        static let pauseMedia = "audio.pauseMedia"
         static let model = "transcription.model"
         static let language = "transcription.language"
         static let enabled = "general.enabled"
