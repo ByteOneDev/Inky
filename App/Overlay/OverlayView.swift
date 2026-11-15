@@ -12,6 +12,19 @@ struct OverlayView: View {
     let model: OverlayModel
 
     var body: some View {
+        switch model.style {
+        case .capsule: CapsuleOverlay(model: model)
+        case .cassette: CassetteOverlay(model: model)
+        case .radio: RadioOverlay(model: model)
+        }
+    }
+}
+
+/// Style « capsule ».
+private struct CapsuleOverlay: View {
+    let model: OverlayModel
+
+    var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black.opacity(model.phase.isCompact && !model.isHovering ? 0.7 : 0.88), in: Capsule())
@@ -35,7 +48,8 @@ struct OverlayView: View {
                     .minimumScaleFactor(0.8)
                     .padding(.horizontal, 12)
             } else {
-                EmptyView()
+                // Pas `EmptyView` : elle ne dessinerait même pas le fond de la capsule.
+                Color.clear
             }
 
         case .preparing:

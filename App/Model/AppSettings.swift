@@ -66,6 +66,10 @@ final class AppSettings {
 
     // — Pastille —
     var overlayPosition: OverlayPosition { didSet { save(overlayPosition, Keys.overlayPosition) } }
+    /// Capsule ou magnétoscope rangé sur le côté.
+    var overlayStyle: OverlayStyle { didSet { save(overlayStyle, Keys.overlayStyle) } }
+    /// Finition de la radio.
+    var overlayFinish: RadioFinish { didSet { save(overlayFinish, Keys.overlayFinish) } }
     /// Afficher la pastille pendant l'enregistrement et la transcription.
     var overlayEnabled: Bool { didSet { defaults.set(overlayEnabled, forKey: Keys.overlayEnabled) } }
     /// Garder une petite pastille visible au repos (y compris en plein écran).
@@ -107,6 +111,8 @@ final class AppSettings {
         restoreClipboard = defaults.object(forKey: Keys.restoreClipboard) as? Bool ?? true
         restoreDelayMs = defaults.object(forKey: Keys.restoreDelay) as? Int ?? 350
         overlayPosition = Self.load(Keys.overlayPosition, from: defaults) ?? .bottom
+        overlayStyle = Self.load(Keys.overlayStyle, from: defaults) ?? .capsule
+        overlayFinish = Self.load(Keys.overlayFinish, from: defaults) ?? .graphite
         overlayEnabled = defaults.object(forKey: Keys.overlayEnabled) as? Bool ?? true
         overlayAlwaysVisible = defaults.object(forKey: Keys.overlayAlways) as? Bool ?? true
         overlayShowsTimer = defaults.object(forKey: Keys.overlayTimer) as? Bool ?? true
@@ -150,6 +156,8 @@ final class AppSettings {
         static let restoreClipboard = "insertion.restoreClipboard"
         static let restoreDelay = "insertion.restoreDelayMs"
         static let overlayPosition = "overlay.position"
+        static let overlayStyle = "overlay.style"
+        static let overlayFinish = "overlay.finish"
         static let retention = "history.retention"
         static let keepAudio = "history.keepAudio"
         static let onboarding = "onboarding.completed"

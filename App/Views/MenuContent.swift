@@ -36,6 +36,16 @@ struct MenuContent: View {
             .keyboardShortcut("h")
 
         Menu("Pastille") {
+            Picker("Style", selection: $settings.overlayStyle) {
+                ForEach(OverlayStyle.allCases) { Text($0.displayName).tag($0) }
+            }
+            .pickerStyle(.inline)
+            if settings.overlayStyle == .radio {
+                Picker("Finition", selection: $settings.overlayFinish) {
+                    ForEach(RadioFinish.allCases) { Text($0.displayName).tag($0) }
+                }
+            }
+            Divider()
             Toggle("Toujours visible (même en plein écran)", isOn: $settings.overlayAlwaysVisible)
             Toggle("Afficher pendant la dictée", isOn: $settings.overlayEnabled)
         }

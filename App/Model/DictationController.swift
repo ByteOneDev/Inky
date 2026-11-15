@@ -159,7 +159,7 @@ final class DictationController {
             self?.enabledChanged()
         }
         observe { [settings] in
-            (settings.overlayPosition, settings.overlayEnabled, settings.overlayAlwaysVisible, settings.overlayShowsTimer)
+            (settings.overlayPosition, settings.overlayEnabled, settings.overlayAlwaysVisible, settings.overlayShowsTimer, settings.overlayStyle, settings.overlayFinish)
         } then: { [weak self] in
             self?.applyOverlaySettings()
         }
@@ -196,6 +196,7 @@ final class DictationController {
         hotkeys.stateMachine.handsFree = settings.handsFreeShortcut
         hotkeys.stateMachine.reset()
         overlay.model.hint = "Clique ou maintiens \(settings.pushToTalkShortcut.displayString) pour dicter"
+        overlay.model.shortcutLabel = settings.pushToTalkShortcut.displayString
     }
 
     private func applyOverlaySettings() {
@@ -204,6 +205,8 @@ final class DictationController {
         overlay.alwaysVisible = settings.overlayAlwaysVisible
         overlay.isEnabled = settings.isEnabled
         overlay.model.showsTimer = settings.overlayShowsTimer
+        overlay.model.style = settings.overlayStyle
+        overlay.model.finish = settings.overlayFinish
         overlay.refresh()
     }
 
@@ -521,8 +524,15 @@ final class DictationController {
 
     #if DEBUG
     private func runOverlayDemo() {
+        if let raw = UserDefaults.standard.string(forKey: "overlayDemoStyle"), let style = OverlayStyle(rawValue: raw) {
+            overlay.model.style = style
+        }
+        if let raw = UserDefaults.standard.string(forKey: "overlayDemoFinish"), let finish = RadioFinish(rawValue: raw) {
+            overlay.model.finish = finish
+        }
         Task { @MainActor [overlay] in
             let steps: [OverlayModel.Phase] = [
+                .idle,
                 .preparing,
                 .recording(handsFree: false, startedAt: Date()),
                 .recording(handsFree: true, startedAt: Date()),

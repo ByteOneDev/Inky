@@ -44,7 +44,7 @@ où se trouve le curseur, dans n'importe quelle app.
 | IA (LLM) | **Apple Intelligence** (`FoundationModels`, module `InkyLLM`) derrière le protocole `LanguageModelProvider` | Local, 0 Mo à télécharger, parle français. Exige macOS 26+ et Apple Intelligence activé ; sinon repli : le texte dicté est inséré tel quel. Ollama ou une API pourront s'ajouter comme autre conformité. |
 | Prompts IA | Phrase déclencheuse **au début** de la dictée + consigne écrite à l'avance (`PromptTemplate`, `templates.json`) | Pas de raccourci en plus à retenir. Option « lire le texte déjà écrit » (AX) pour compléter un mail. |
 | Statistiques | Table SQLite `usage` séparée de l'historique, **sans texte** | Doit survivre à la purge de l'historique ; ne garde que mots, durée, app. Calcul pur dans `UsageSummary` (testé). |
-| Interface | Fenêtre principale à barre latérale (style Wispr Flow) + pastille noire | Une seule fenêtre pour accueil/stats, historique, dictionnaire, snippets, prompts IA, style et réglages. Thème dans `App/Design/Theme.swift`. |
+| Interface | Fenêtre principale à barre latérale (style Wispr Flow) + pastille au choix : capsule, magnétoscope ou radio (4 finitions), ces deux derniers rangés contre le bord de l'écran | Une seule fenêtre pour accueil/stats, historique, dictionnaire, snippets, prompts IA, style et réglages. Thème dans `App/Design/Theme.swift`. |
 
 ## Architecture
 
@@ -135,6 +135,11 @@ où se trouve le curseur, dans n'importe quelle app.
 - **Plein écran et Spaces.** La pastille est un `NSPanel` avec
   `.canJoinAllSpaces` + `.fullScreenAuxiliary`, niveau `.statusBar`, non activant
   (elle ne vole **jamais** le focus, sinon ⌘V collerait dans la pastille).
+- **Survol de la pastille.** Elle change de taille au survol : les zones de suivi
+  d'AppKit envoyaient alors sortie/entrée en boucle (clignotement). On interroge la
+  position de la souris 10 fois par seconde, avec une hystérésis (`checkHover`).
+- **`EmptyView` ne dessine rien**, même pas le fond qu'on lui applique : utiliser
+  `Color.clear` pour un contenu vide qui garde son arrière-plan.
 - **Plusieurs écrans.** La pastille s'affiche sur l'écran de la fenêtre active (lue
   via l'API d'Accessibilité), sinon sur l'écran de la souris. Coordonnées AX
   (origine en haut à gauche) ≠ coordonnées Cocoa (origine en bas à gauche).

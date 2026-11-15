@@ -3,6 +3,34 @@ import ApplicationServices
 import Observation
 import SwiftUI
 
+/// Apparence de la pastille, au choix dans les réglages.
+enum OverlayStyle: String, Codable, CaseIterable, Identifiable {
+    /// Capsule noire, discrète, en bas de l'écran (par défaut).
+    case capsule
+    /// Petit magnétoscope à cassette rangé contre le bord de l'écran : il ne
+    /// dépasse que d'une languette, et sort quand on dicte ou qu'on le survole.
+    case cassette
+    /// Petite radio (grille de haut-parleur + écran), rangée contre le bord, en
+    /// plusieurs finitions.
+    case radio
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .capsule: "Capsule"
+        case .cassette: "Magnétoscope"
+        case .radio: "Radio"
+        }
+    }
+
+    /// Rangé contre le bord de l'écran (et non posé à une position libre).
+    var isDocked: Bool { self != .capsule }
+}
+
+/// Bord de l'écran contre lequel le magnétoscope est rangé.
+enum DockEdge: Equatable { case left, right }
+
 /// Ce que la pastille affiche.
 @MainActor
 @Observable
@@ -24,9 +52,14 @@ final class OverlayModel {
     }
 
     var phase: Phase = .idle
+    var style: OverlayStyle = .capsule
+    var finish: RadioFinish = .graphite
+    var dockEdge: DockEdge = .right
     var showsTimer = true
-    /// Raccourci affiché dans l'infobulle de la pastille au repos.
+    /// Raccourci affiché quand on survole la pastille au repos.
     var hint = ""
+    /// Texte court du raccourci (« ⌃⌘ ») pour le magnétoscope.
+    var shortcutLabel = ""
     /// La souris survole la pastille au repos : on affiche l'aide.
     var isHovering = false
     /// Historique glissant des niveaux sonores (0…1), un par barre.
@@ -69,23 +102,41 @@ final class OverlayController {
 
     private var panel: NSPanel?
     private var hideTask: Task<Void, Never>?
+    private var hoverTimer: Timer?
     private var observers: [NSObjectProtocol] = []
+    /// Écran où la pastille est affichée (pour calculer les cadres de survol).
+    private var currentScreen: NSScreen?
 
-    static let compactSize = CGSize(width: 44, height: 13)
+    /// Marge par rapport aux bords de l'écran (la capsule ; le magnétoscope est collé au bord).
+    private let margin: CGFloat = 14
 
-    /// Taille de la fenêtre pour chaque état (la capsule est dessinée 2 pt à l'intérieur).
-    static func size(for phase: OverlayModel.Phase, hovering: Bool, showsTimer: Bool) -> CGSize {
-        switch phase {
-        case .idle: hovering ? CGSize(width: 290, height: 30) : compactSize
-        case .preparing: CGSize(width: 140, height: 36)
-        case .recording(let handsFree, _): CGSize(width: (handsFree ? 190 : 150) + (showsTimer ? 34 : 0), height: 36)
-        case .transcribing: CGSize(width: 84, height: 36)
-        case .rewriting: CGSize(width: 250, height: 36)
-        case .message: CGSize(width: 340, height: 46)
+    /// Taille de la fenêtre pour chaque état et chaque style.
+    static func size(for phase: OverlayModel.Phase, style: OverlayStyle, hovering: Bool, showsTimer: Bool) -> CGSize {
+        switch style {
+        case .capsule:
+            // La capsule est dessinée 2 pt à l'intérieur de la fenêtre.
+            switch phase {
+            case .idle: return hovering ? CGSize(width: 300, height: 36) : CGSize(width: 56, height: 20)
+            case .preparing: return CGSize(width: 150, height: 44)
+            case .recording(let handsFree, _): return CGSize(width: (handsFree ? 204 : 164) + (showsTimer ? 34 : 0), height: 44)
+            case .transcribing: return CGSize(width: 92, height: 44)
+            case .rewriting: return CGSize(width: 260, height: 44)
+            case .message: return CGSize(width: 350, height: 52)
+            }
+        case .cassette:
+            switch phase {
+            case .idle: return hovering ? CassetteMetrics.full : CassetteMetrics.tab
+            case .message: return CGSize(width: 320, height: 66)
+            default: return CassetteMetrics.full
+            }
+        case .radio:
+            switch phase {
+            case .idle: return hovering ? RadioMetrics.full : RadioMetrics.tab
+            case .message: return CGSize(width: 320, height: 70)
+            default: return RadioMetrics.full
+            }
         }
     }
-    /// Marge par rapport aux bords de l'écran.
-    private let margin: CGFloat = 14
 
     init() {
         // Repositionner quand l'utilisateur change d'app (donc peut-être d'écran)
@@ -123,6 +174,7 @@ final class OverlayController {
 
     /// Applique les réglages courants : visible ou non, taille, position.
     func refresh() {
+        model.dockEdge = [.topLeft, .left, .bottomLeft].contains(position) ? .left : .right
         let phase = model.phase
         let visible: Bool
         if !isEnabled {
@@ -138,6 +190,7 @@ final class OverlayController {
 
         guard visible else {
             panel?.orderOut(nil)
+            updateHoverTracking()
             return
         }
         let panel = self.panel ?? makePanel()
@@ -149,18 +202,21 @@ final class OverlayController {
         }
         reposition()
         panel.orderFrontRegardless() // afficher SANS activer l'app
+        updateHoverTracking()
     }
 
     private func reposition() {
         guard let panel else { return }
-        let size = Self.size(for: model.phase, hovering: model.isHovering, showsTimer: model.showsTimer)
         let screen = FrontWindowLocator.screenOfFrontmostWindow() ?? NSScreen.main ?? NSScreen.screens[0]
-        let frame = CGRect(origin: origin(for: position, size: size, on: screen), size: size)
+        currentScreen = screen
+        let frame = frame(hovering: model.isHovering, on: screen)
         guard panel.frame != frame else { return }
-        // Petite animation quand la pastille change de taille sur le même écran.
+        // Petite animation quand la pastille change de taille sur le même écran
+        // (le magnétoscope « glisse » hors du bord).
         if panel.isVisible, panel.frame.intersects(screen.frame) {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.16
+                context.duration = model.style.isDocked ? 0.22 : 0.16
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 panel.animator().setFrame(frame, display: true)
             }
         } else {
@@ -168,9 +224,18 @@ final class OverlayController {
         }
     }
 
+    /// Cadre de la fenêtre pour la phase courante.
+    private func frame(hovering: Bool, on screen: NSScreen) -> CGRect {
+        let size = Self.size(for: model.phase, style: model.style, hovering: hovering, showsTimer: model.showsTimer)
+        let origin = model.style.isDocked
+            ? dockedOrigin(size: size, on: screen)
+            : origin(for: position, size: size, on: screen)
+        return CGRect(origin: origin, size: size)
+    }
+
     private func makePanel() -> NSPanel {
         let panel = NSPanel(
-            contentRect: CGRect(origin: .zero, size: Self.compactSize),
+            contentRect: CGRect(origin: .zero, size: CGSize(width: 56, height: 20)),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -184,19 +249,50 @@ final class OverlayController {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.isMovable = false
-        let host = ClickThroughHostingView(rootView: OverlayView(model: model))
-        host.onHoverChange = { [weak self] hovering in self?.hoverChanged(hovering) }
-        panel.contentView = host
+        panel.contentView = ClickThroughHostingView(rootView: OverlayView(model: model))
         return panel
     }
 
+    // MARK: - Survol
+
     /// Survol de la pastille au repos : elle s'agrandit pour afficher l'aide.
-    private func hoverChanged(_ hovering: Bool) {
-        let hovering = hovering && model.phase == .idle
-        guard model.isHovering != hovering else { return }
+    ///
+    /// Pourquoi interroger la position de la souris (10 fois par seconde) au
+    /// lieu des « zones de suivi » d'AppKit ? Parce que la fenêtre change de
+    /// taille au survol : pendant l'animation, AppKit envoyait « sortie » puis
+    /// « entrée » en boucle, et la pastille clignotait. Ici on compare la souris
+    /// à des cadres **fixes**, avec une hystérésis : on s'agrandit quand la
+    /// souris touche la petite pastille, on ne rétrécit que lorsqu'elle quitte
+    /// la grande. Aucune oscillation possible.
+    private func updateHoverTracking() {
+        let needed = panel?.isVisible == true && model.phase == .idle
+        if needed, hoverTimer == nil {
+            let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.checkHover() }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            hoverTimer = timer
+        } else if !needed {
+            hoverTimer?.invalidate()
+            hoverTimer = nil
+        }
+    }
+
+    private func checkHover() {
+        guard model.phase == .idle, let screen = currentScreen else { return }
+        let mouse = NSEvent.mouseLocation
+        let hovering: Bool
+        if model.isHovering {
+            hovering = frame(hovering: true, on: screen).insetBy(dx: -6, dy: -6).contains(mouse)
+        } else {
+            hovering = frame(hovering: false, on: screen).insetBy(dx: -2, dy: -2).contains(mouse)
+        }
+        guard hovering != model.isHovering else { return }
         model.isHovering = hovering
         reposition()
     }
+
+    // MARK: - Position
 
     /// Calcule le coin bas-gauche de la pastille. En Cocoa, l'origine (0, 0) est
     /// en **bas** à gauche de l'écran principal, et `y` monte.
@@ -221,37 +317,27 @@ final class OverlayController {
         case .bottomRight: return CGPoint(x: right, y: bottom)
         }
     }
+
+    /// Le magnétoscope et la radio sont collés au bord gauche ou droit de l'écran. La
+    /// position choisie donne le bord (gauche/droite) et la hauteur (haut,
+    /// milieu, bas) ; « En haut » et « En bas » (centre) vont à droite.
+    private func dockedOrigin(size: CGSize, on screen: NSScreen) -> CGPoint {
+        let f = screen.visibleFrame
+        let x = model.dockEdge == .left ? f.minX : f.maxX - size.width
+        // On aligne le centre vertical du magnétoscope, pour qu'il sorte de sa languette.
+        let anchorY: CGFloat = switch position {
+        case .topLeft, .top, .topRight: f.maxY - 120
+        case .left, .right: f.midY
+        case .bottomLeft, .bottom, .bottomRight: f.minY + 140
+        }
+        return CGPoint(x: x, y: anchorY - size.height / 2)
+    }
 }
 
 /// Vue hôte qui accepte le « premier clic » : sans ça, le premier clic sur une
 /// fenêtre d'une app inactive sert seulement à… l'activer.
-///
-/// Elle suit aussi le survol de la souris avec une zone de suivi « toujours
-/// active » : la pastille appartient à une app qui n'est jamais au premier plan.
 private final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
-    var onHoverChange: ((Bool) -> Void)?
-    private var hoverArea: NSTrackingArea?
-
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        // On ne retire que notre zone : SwiftUI a les siennes.
-        if let hoverArea { removeTrackingArea(hoverArea) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
-        addTrackingArea(area)
-        hoverArea = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        onHoverChange?(true)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        onHoverChange?(false)
-    }
 }
 
 /// Trouve l'écran qui contient la fenêtre active de l'app au premier plan.

@@ -37,6 +37,13 @@ struct GeneralSettings: View {
             }
 
             Section("Pastille") {
+                OverlayStyleGallery(settings: settings)
+                    .padding(.vertical, 4)
+                Text(settings.overlayStyle.isDocked
+                     ? "Rangé contre le bord de l'écran : seule une languette dépasse. Il sort quand tu le survoles ou que tu dictes. La position choisit le bord (gauche ou droite) et la hauteur."
+                     : "Une capsule noire discrète, à l'endroit choisi.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Toujours visible, même en plein écran", isOn: $settings.overlayAlwaysVisible)
                 Text("Une petite capsule discrète reste à l'écran. Clique dessus pour démarrer ou arrêter une dictée mains libres.")
                     .font(.caption)

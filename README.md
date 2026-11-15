@@ -39,8 +39,10 @@ relâches : le texte apparaît là où se trouve ton curseur, dans n'importe que
 Les deux raccourcis se changent dans **Réglages › Général** (modificateurs seuls ou
 combinaison avec une touche, par ex. ⌥Espace).
 
-Une petite pastille noire reste visible en bas de l'écran, même au-dessus des apps en
-plein écran (survol = aide, clic = dictée mains libres). Pendant une dictée, elle
+Une petite pastille reste visible, même au-dessus des apps en plein écran (survol =
+aide, clic = dictée mains libres). Trois styles au choix dans Réglages › Général :
+**capsule** noire, **magnétoscope** à cassette ou **radio** (aluminium, graphite,
+encre, crème), ces deux derniers rangés contre le bord de l'écran. Pendant une dictée, elle
 affiche **« Attends… »** le temps que le micro démarre, puis un point rouge et la forme
 d'onde : parle à ce moment-là. En mains libres, ✕ annule et ■ termine. Tout se
 désactive dans les réglages, et le menu permet de mettre Inky en pause.
