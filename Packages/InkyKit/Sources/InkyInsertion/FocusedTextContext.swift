@@ -53,6 +53,56 @@ public enum FocusedTextContext {
         return String(utf16CodeUnits: [utf16[index]], count: 1).first
     }
 
+    /// Texte situé avant le curseur dans le champ actif (au plus `maxLength`
+    /// caractères, les plus proches du curseur), ou `nil` si l'app ne l'expose pas.
+    ///
+    /// Sert aux modèles de prompts « compléter » : l'IA lit le début du mail
+    /// pour en écrire la suite. Rien n'est stocké ni envoyé hors du Mac.
+    public static func textBeforeCursor(maxLength: Int = 6000) -> String? {
+        guard let element = focusedElement(),
+              let selection = selectedRange(of: element)
+        else { return nil }
+        let end = max(0, selection.location)
+        if end == 0 { return "" }
+        let start = max(0, end - maxLength)
+
+        var range = CFRange(location: start, length: end - start)
+        if let rangeValue = AXValueCreate(.cfRange, &range) {
+            var stringRef: CFTypeRef?
+            if AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString, rangeValue, &stringRef) == .success,
+               let string = stringRef as? String {
+                return string
+            }
+        }
+        // Repli : la valeur complète du champ, coupée au curseur.
+        var valueRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
+              let value = valueRef as? String
+        else { return nil }
+        let utf16 = Array(value.utf16)
+        guard end <= utf16.count else { return nil }
+        return String(utf16CodeUnits: Array(utf16[start..<end]), count: end - start)
+    }
+
+    private static func focusedElement() -> AXUIElement? {
+        let system = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID()
+        else { return nil }
+        return (focusedRef as! AXUIElement)
+    }
+
+    private static func selectedRange(of element: AXUIElement) -> CFRange? {
+        var rangeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+              let rangeRef, CFGetTypeID(rangeRef) == AXValueGetTypeID()
+        else { return nil }
+        var selection = CFRange()
+        guard AXValueGetValue(rangeRef as! AXValue, .cfRange, &selection) else { return nil }
+        return selection
+    }
+
     /// Ajoute une espace devant `text` si le curseur suit directement un mot ou
     /// une ponctuation de fin (« Bonjour.|Comment » → « Bonjour. Comment »).
     public static func applySmartSpacing(to text: String, previous: Character?) -> String {

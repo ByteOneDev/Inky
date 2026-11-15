@@ -54,3 +54,43 @@ struct HistoryStoreTests {
         #expect(try store.purge(retention: .never) == 1)
     }
 }
+
+struct UsageStoreTests {
+    @Test func usageSurvivesHistoryDeletion() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = try HistoryStore(dbQueue: DatabaseQueue(), audioDirectory: dir)
+        let entry = HistoryEntry(text: "Bonjour à tous", rawText: "bonjour à tous", audioDuration: 2, processingTime: 0.3, modelID: "test")
+        try store.add(entry, usage: UsageRecord(wordCount: 3, audioDuration: 2))
+        try store.addUsage(UsageRecord(wordCount: 5, audioDuration: 3))
+        try store.deleteAll()
+        #expect(try store.fetch().isEmpty)
+        #expect(try store.fetchUsage().map(\.wordCount) == [3, 5])
+        try store.resetUsage()
+        #expect(try store.fetchUsage().isEmpty)
+    }
+
+    @Test func migrationBackfillsUsageFromExistingHistory() throws {
+        // Base « v0.2 » : seulement la migration v1, avec une dictée.
+        let db = try DatabaseQueue()
+        var v1 = DatabaseMigrator()
+        v1.registerMigration("v1") { db in
+            try db.execute(sql: """
+                CREATE TABLE transcription (id INTEGER PRIMARY KEY AUTOINCREMENT, createdAt DATETIME NOT NULL,
+                text TEXT NOT NULL, rawText TEXT NOT NULL, audioDuration DOUBLE NOT NULL, processingTime DOUBLE NOT NULL,
+                modelID TEXT NOT NULL, language TEXT, appName TEXT, appBundleID TEXT, audioFileName TEXT)
+                """)
+            try db.execute(sql: "INSERT INTO transcription (createdAt, text, rawText, audioDuration, processingTime, modelID, appName) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                           arguments: [Date(), "Un deux trois quatre", "", 2.5, 0.2, "m", "Notes"])
+        }
+        try v1.migrate(db)
+
+        let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = try HistoryStore(dbQueue: db, audioDirectory: dir)
+        let usage = try store.fetchUsage()
+        #expect(usage.count == 1)
+        #expect(usage.first?.wordCount == 4)
+        #expect(usage.first?.appName == "Notes")
+    }
+}

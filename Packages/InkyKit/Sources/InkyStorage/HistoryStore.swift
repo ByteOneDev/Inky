@@ -85,18 +85,58 @@ public final class HistoryStore: Sendable {
                 t.column("audioFileName", .text)
             }
         }
+        // v2 (Inky 0.3) : table des statistiques, remplie avec l'historique existant.
+        migrator.registerMigration("v2-usage") { db in
+            try db.create(table: "usage") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("createdAt", .datetime).notNull().indexed()
+                t.column("wordCount", .integer).notNull()
+                t.column("audioDuration", .double).notNull()
+                t.column("appName", .text)
+                t.column("appBundleID", .text)
+            }
+            // SQL brut plutôt que `HistoryEntry` : une migration doit rester
+            // valable même si le type Swift évolue plus tard.
+            let rows = try Row.fetchAll(db, sql: "SELECT createdAt, text, audioDuration, appName, appBundleID FROM transcription")
+            for row in rows {
+                var record = UsageRecord(
+                    createdAt: row["createdAt"],
+                    wordCount: WordCounter.count(row["text"]),
+                    audioDuration: row["audioDuration"],
+                    appName: row["appName"],
+                    appBundleID: row["appBundleID"]
+                )
+                try record.insert(db)
+            }
+        }
         return migrator
     }
 
     // MARK: - Écriture
 
+    /// Enregistre une dictée dans l'historique, et ses statistiques si `usage`
+    /// est fourni (dans la même transaction : tout ou rien).
     @discardableResult
-    public func add(_ entry: HistoryEntry) throws -> HistoryEntry {
+    public func add(_ entry: HistoryEntry, usage: UsageRecord? = nil) throws -> HistoryEntry {
         try dbQueue.write { db in
             var entry = entry
             try entry.insert(db)
+            if var usage { try usage.insert(db) }
             return entry
         }
+    }
+
+    /// Enregistre seulement les statistiques (historique désactivé).
+    public func addUsage(_ usage: UsageRecord) throws {
+        try dbQueue.write { db in
+            var usage = usage
+            try usage.insert(db)
+        }
+    }
+
+    /// Remet les statistiques à zéro (l'historique n'est pas touché).
+    public func resetUsage() throws {
+        _ = try dbQueue.write { db in try UsageRecord.deleteAll(db) }
     }
 
     public func delete(_ entry: HistoryEntry) throws {
@@ -147,6 +187,21 @@ public final class HistoryStore: Sendable {
                 logger.error("Observation de l'historique : \(error.localizedDescription, privacy: .public)")
             }, onChange: onChange)
         return HistoryObservation(cancellable)
+    }
+
+    /// Observe les statistiques (toutes les dictées depuis le début).
+    @MainActor
+    public func observeUsage(onChange: @escaping @MainActor ([UsageRecord]) -> Void) -> HistoryObservation {
+        let cancellable = ValueObservation
+            .tracking { db in try UsageRecord.order(Column("createdAt")).fetchAll(db) }
+            .start(in: dbQueue, scheduling: .immediate, onError: { [logger] error in
+                logger.error("Observation des statistiques : \(error.localizedDescription, privacy: .public)")
+            }, onChange: onChange)
+        return HistoryObservation(cancellable)
+    }
+
+    public func fetchUsage() throws -> [UsageRecord] {
+        try dbQueue.read { db in try UsageRecord.order(Column("createdAt")).fetchAll(db) }
     }
 
     private static func request(search: String, limit: Int) -> QueryInterfaceRequest<HistoryEntry> {

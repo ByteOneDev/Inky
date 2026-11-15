@@ -20,6 +20,7 @@ let package = Package(
         .library(name: "InkyInsertion", targets: ["InkyInsertion"]),
         .library(name: "InkyStorage", targets: ["InkyStorage"]),
         .library(name: "InkyUpdates", targets: ["InkyUpdates"]),
+        .library(name: "InkyLLM", targets: ["InkyLLM"]),
     ],
     dependencies: [
         // Transcription Whisper via CoreML (Argmax, licence MIT).
@@ -54,6 +55,9 @@ let package = Package(
 
         // Mises à jour automatiques depuis les releases GitHub.
         .target(name: "InkyUpdates"),
+
+        // Modèle de langage local (Apple Intelligence) pour les modèles de prompts.
+        .target(name: "InkyLLM", dependencies: ["InkyCore"]),
 
         .testTarget(name: "InkyCoreTests", dependencies: ["InkyCore"]),
         .testTarget(name: "InkyHotkeysTests", dependencies: ["InkyHotkeys"]),
