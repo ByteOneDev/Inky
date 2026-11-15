@@ -117,3 +117,19 @@ struct UsageSummaryTests {
         #expect(WordCounter.count("   ") == 0)
     }
 }
+
+struct TemplateEchoTests {
+    @Test func removesEchoedFieldText() {
+        let field = "Bonjour Claire,\n\nMerci pour l'invitation."
+        let response = "Bonjour Claire,\n\nMerci pour l'invitation.\nJe serai en retard."
+        #expect(TemplateRenderer.removeEcho(of: field, from: response) == "Je serai en retard.")
+        #expect(TemplateRenderer.removeEcho(of: field, from: "Je serai en retard.") == "Je serai en retard.")
+        #expect(TemplateRenderer.removeEcho(of: nil, from: "Texte") == "Texte")
+    }
+
+    @Test func legacyExamplesMapToCurrentOnes() {
+        let current = Set(PromptTemplate.examples.map(\.instructions))
+        #expect(PromptTemplate.legacyExampleInstructions.count == 3)
+        #expect(PromptTemplate.legacyExampleInstructions.values.allSatisfy { current.contains($0) })
+    }
+}

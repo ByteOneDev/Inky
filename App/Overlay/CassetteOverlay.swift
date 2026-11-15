@@ -37,7 +37,8 @@ struct CassetteOverlay: View {
                 LinearGradient(colors: [Color(white: 0.2), Color(white: 0.11)], startPoint: .top, endPoint: .bottom),
                 in: shape
             )
-            .overlay(shape.strokeBorder(.white.opacity(0.14), lineWidth: 0.75))
+            .overlay(shape.inset(by: 3).stroke(.white.opacity(0.14), lineWidth: 0.75))
+            .overlay(shape.strokeBorder(Color.black, lineWidth: 3))
             .environment(\.colorScheme, .dark)
             .contentShape(shape)
             .onTapGesture { model.onClick?() }

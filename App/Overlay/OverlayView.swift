@@ -70,7 +70,8 @@ private struct CapsuleOverlay: View {
                 } else {
                     Circle().fill(Color.red).frame(width: 7, height: 7)
                 }
-                WaveformView(levels: model.levels, color: .white)
+                DitherWave(levels: model.levels, color: .white, pitch: 2.5, dot: 1.7, floor: 0.08)
+                    .frame(height: 24)
                 if model.showsTimer {
                     ElapsedTimeView(since: startedAt)
                 }

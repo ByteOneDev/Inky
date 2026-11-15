@@ -44,6 +44,9 @@ enum RadioFinish: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Boîtier clair (biseau plus marqué).
+    var isLight: Bool { self == .aluminium || self == .cream }
+
     /// Bordure du boîtier.
     var bezel: Color {
         switch self {
@@ -73,11 +76,15 @@ struct RadioOverlay: View {
     private var finish: RadioFinish { model.finish }
 
     var body: some View {
+        let shape = dockedShape(model.dockEdge, radius: 18)
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(LinearGradient(colors: finish.body, startPoint: .top, endPoint: .bottom), in: dockedShape(model.dockEdge, radius: 18))
-            .overlay(dockedShape(model.dockEdge, radius: 18).strokeBorder(finish.bezel, lineWidth: 1))
-            .contentShape(dockedShape(model.dockEdge, radius: 18))
+            .background(LinearGradient(colors: finish.body, startPoint: .top, endPoint: .bottom), in: shape)
+            // Biseau clair juste à l'intérieur, puis la **bordure noire** épaisse
+            // qui détoure l'appareil sur n'importe quel fond.
+            .overlay(shape.inset(by: 3).stroke(.white.opacity(finish.isLight ? 0.55 : 0.12), lineWidth: 1))
+            .overlay(shape.strokeBorder(Color.black, lineWidth: 3))
+            .contentShape(shape)
             .onTapGesture { model.onClick?() }
     }
 
@@ -106,31 +113,70 @@ struct RadioOverlay: View {
             .padding(9)
         default:
             HStack(spacing: 10) {
-                SpeakerGrille(color: finish.grille, columns: 7, rows: 7, dot: 4.4)
-                    .frame(width: 66, height: 66)
+                SpeakerGrille(color: finish.grille, columns: 9, rows: 9, dot: 4)
+                    .frame(width: 64, height: 64)
                 Screen(finish: finish) { screenContent }
             }
             .padding(.vertical, 12)
-            .padding(.leading, model.dockEdge == .right ? 14 : 10)
-            .padding(.trailing, model.dockEdge == .right ? 10 : 14)
+            .padding(.leading, model.dockEdge == .right ? 15 : 11)
+            .padding(.trailing, model.dockEdge == .right ? 11 : 15)
         }
     }
 
+    /// L'écran : la vague en pointillés en haut, une barre noire d'état en bas.
     private var screenContent: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(spacing: 0) {
+            wave
+                .padding(.horizontal, 3)
+                .padding(.top, 3)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             HStack(spacing: 5) {
-                status
-                Spacer(minLength: 0)
+                statusBar
             }
-            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-            .foregroundStyle(finish.screen)
+            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.92))
             .lineLimit(1)
             .minimumScaleFactor(0.7)
-
-            bottom
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 21)
+            .background(Color.black.opacity(0.85))
         }
-        .padding(8)
+    }
+
+    /// La vague suit la voix pendant l'enregistrement ; ailleurs, une houle
+    /// calme (pâle pendant « Attends… », vive pendant la transcription).
+    @ViewBuilder
+    private var wave: some View {
+        switch model.phase {
+        case .recording:
+            DitherWave(levels: model.levels, color: finish.screen)
+        case .preparing:
+            DitherWave(levels: [0, 0], color: finish.screen.opacity(0.4), floor: 0.08)
+        case .transcribing, .rewriting:
+            DitherWave(levels: [0.12, 0.2, 0.12], color: finish.screen, floor: 0.18)
+        default:
+            DitherWave(levels: [0, 0], color: finish.screen.opacity(0.7), floor: 0.1)
+        }
+    }
+
+    @ViewBuilder
+    private var statusBar: some View {
+        switch model.phase {
+        case .recording(let handsFree, _):
+            if handsFree {
+                ScreenButton(symbol: "xmark", color: .white) { model.onCancel?() }.help("Annuler")
+            }
+            status
+            Spacer(minLength: 0)
+            if handsFree {
+                ScreenButton(symbol: "stop.fill", color: .red) { model.onClick?() }.help("Terminer et insérer")
+            }
+        case .idle:
+            Text("Clique ou \(model.shortcutLabel)")
+        default:
+            status
+        }
     }
 
     @ViewBuilder
@@ -153,33 +199,6 @@ struct RadioOverlay: View {
         case .message: EmptyView()
         }
     }
-
-    @ViewBuilder
-    private var bottom: some View {
-        switch model.phase {
-        case .idle:
-            Text("Clique ou maintiens \(model.shortcutLabel)")
-                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                .foregroundStyle(finish.screen.opacity(0.8))
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        case .recording(let handsFree, _):
-            HStack(spacing: 5) {
-                if handsFree {
-                    ScreenButton(symbol: "xmark", color: finish.screen) { model.onCancel?() }.help("Annuler")
-                }
-                ScreenWaveform(levels: model.levels, color: finish.screen)
-                if handsFree {
-                    ScreenButton(symbol: "stop.fill", color: .red) { model.onClick?() }.help("Terminer et insérer")
-                }
-            }
-        case .preparing:
-            ScreenWaveform(levels: Array(repeating: 0, count: 16), color: finish.screen.opacity(0.35))
-        default:
-            ScanLine(color: finish.screen)
-        }
-    }
 }
 
 /// Coins arrondis seulement côté écran : l'autre côté « rentre » dans le bord.
@@ -195,19 +214,34 @@ private struct Screen<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
-                LinearGradient(colors: [Color(white: 0.13), Color(white: 0.04)], startPoint: .top, endPoint: .bottom),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                LinearGradient(colors: [Color(white: 0.12), Color(white: 0.03)], startPoint: .top, endPoint: .bottom)
             )
-            .overlay(
-                // Reflet en haut de l'écran.
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(LinearGradient(colors: [.white.opacity(0.08), .clear], startPoint: .top, endPoint: .center))
-                    .allowsHitTesting(false)
-            )
-            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(.black.opacity(0.6), lineWidth: 1.5))
+            .overlay(Glare().allowsHitTesting(false))
+            .clipShape(shape)
+            // Cadre noir épais autour de l'écran.
+            .overlay(shape.strokeBorder(Color.black, lineWidth: 2.5))
+    }
+}
+
+/// Reflet de vitre : une bande claire en diagonale, en haut à droite de l'écran.
+private struct Glare: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let w = proxy.size.width, h = proxy.size.height
+            Path { path in
+                path.move(to: CGPoint(x: w * 0.55, y: 0))
+                path.addLine(to: CGPoint(x: w, y: 0))
+                path.addLine(to: CGPoint(x: w, y: h * 0.5))
+                path.addQuadCurve(to: CGPoint(x: w * 0.55, y: 0), control: CGPoint(x: w * 0.82, y: h * 0.22))
+                path.closeSubpath()
+            }
+            .fill(LinearGradient(colors: [.white.opacity(0.11), .white.opacity(0)], startPoint: .topTrailing, endPoint: .bottomLeading))
+            .blur(radius: 1.5)
+        }
     }
 }
 
@@ -225,52 +259,14 @@ private struct SpeakerGrille: View {
             let dy = size.height / CGFloat(rows)
             for column in 0..<columns {
                 for row in 0..<rows {
+                    // Coins coupés : la grille forme un carré aux angles arrondis.
+                    let cx = abs(Double(column) - Double(columns - 1) / 2) / (Double(columns) / 2)
+                    let cy = abs(Double(row) - Double(rows - 1) / 2) / (Double(rows) / 2)
+                    if columns > 3, pow(cx, 4) + pow(cy, 4) > 0.95 { continue }
                     let center = CGPoint(x: dx * (CGFloat(column) + 0.5), y: dy * (CGFloat(row) + 0.5))
                     let rect = CGRect(x: center.x - dot / 2, y: center.y - dot / 2, width: dot, height: dot)
                     context.fill(Path(ellipseIn: rect), with: .color(color))
                 }
-            }
-        }
-    }
-}
-
-/// Forme d'onde « phosphore » : barres symétriques autour du centre.
-private struct ScreenWaveform: View {
-    let levels: [Float]
-    let color: Color
-
-    var body: some View {
-        GeometryReader { proxy in
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(levels.indices, id: \.self) { index in
-                    Capsule()
-                        .fill(color)
-                        .frame(height: max(2, proxy.size.height * CGFloat(min(1, sqrt(levels[index]) * 1.3))))
-                }
-            }
-            .frame(maxHeight: .infinity)
-            .shadow(color: color.opacity(0.6), radius: 3)
-        }
-        .animation(.linear(duration: 0.08), value: levels)
-    }
-}
-
-/// Une ligne lumineuse qui balaie l'écran (transcription, IA).
-private struct ScanLine: View {
-    let color: Color
-
-    var body: some View {
-        GeometryReader { proxy in
-            TimelineView(.animation) { context in
-                let t = context.date.timeIntervalSinceReferenceDate
-                let x = (sin(t * 3) + 1) / 2 * (proxy.size.width - 18)
-                ZStack(alignment: .leading) {
-                    Capsule().fill(color.opacity(0.15)).frame(height: 3)
-                    Capsule().fill(color).frame(width: 18, height: 3)
-                        .shadow(color: color, radius: 4)
-                        .offset(x: x)
-                }
-                .frame(maxHeight: .infinity)
             }
         }
     }

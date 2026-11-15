@@ -29,10 +29,7 @@ struct OverlayStyleGallery: View {
                         preview(option)
                             .frame(maxWidth: .infinity)
                             .frame(height: 92)
-                            .background(
-                                LinearGradient(colors: [Color(white: 0.55), Color(white: 0.35)], startPoint: .top, endPoint: .bottom),
-                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            )
+                            .background(HalftoneBackground(color: accent(option)))
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         Text(option.name)
                             .font(.callout.weight(selected ? .semibold : .regular))
@@ -47,6 +44,15 @@ struct OverlayStyleGallery: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    /// Couleur des points du fond : celle de l'écran de la radio.
+    private func accent(_ option: Option) -> Color {
+        switch option.style {
+        case .capsule: Color(white: 0.75)
+        case .cassette: Color(red: 0.94, green: 0.62, blue: 0.3)
+        case .radio: (option.finish ?? .graphite).screen
         }
     }
 

@@ -459,7 +459,7 @@ final class DictationController {
         let request = TemplateRenderer.request(for: template, content: match.content, fieldText: fieldText)
         let started = Date()
         do {
-            let response = TemplateRenderer.cleanResponse(try await languageModel.generate(request))
+            let response = TemplateRenderer.removeEcho(of: fieldText, from: TemplateRenderer.cleanResponse(try await languageModel.generate(request)))
             logger.info("Modèle de prompt appliqué en \(Date().timeIntervalSince(started), format: .fixed(precision: 2), privacy: .public) s")
             if response.isEmpty { return match.content.isEmpty ? nil : (match.content, "L'IA n'a rien renvoyé : texte dicté inséré tel quel.") }
             return (response, nil)

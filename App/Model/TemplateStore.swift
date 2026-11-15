@@ -42,8 +42,19 @@ final class TemplateStore {
             return
         }
         isLoading = true
-        templates = (try? JSONDecoder().decode([PromptTemplate].self, from: data)) ?? []
+        var loaded = (try? JSONDecoder().decode([PromptTemplate].self, from: data)) ?? []
+        // Exemples d'une version précédente, jamais modifiés : on passe aux
+        // nouvelles consignes (meilleures avec le modèle d'Apple).
+        var migrated = false
+        for index in loaded.indices {
+            if let newer = PromptTemplate.legacyExampleInstructions[loaded[index].instructions] {
+                loaded[index].instructions = newer
+                migrated = true
+            }
+        }
+        templates = loaded
         isLoading = false
+        if migrated { save() }
     }
 
     private func save() {
