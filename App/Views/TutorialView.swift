@@ -22,10 +22,10 @@ struct TutorialView: View {
         let free = app.settings.handsFreeShortcut.displayString
         return [
             Step(icon: "hand.tap", title: "Push-to-talk",
-                 text: "Maintiens \(ptt). La pastille affiche « Attends… » (jaune) puis passe au rouge : c'est le moment de parler. Relâche pour insérer le texte.",
+                 text: "Maintiens \(ptt). La pastille affiche d'abord « Attends… » (barres grises) le temps que le micro démarre, puis un point rouge et des barres blanches qui bougent : c'est le moment de parler. Relâche pour insérer le texte.",
                  tryThis: "Clique dans la zone ci-dessous, maintiens \(ptt) et dis : « Bonjour, ceci est mon premier essai. »"),
             Step(icon: "infinity", title: "Mains libres",
-                 text: "Pour une longue dictée, appuie une fois sur \(free) (sans maintenir) : la pastille devient orange. Appuie de nouveau pour terminer. Tu peux aussi cliquer sur la petite pastille en bas de l'écran.",
+                 text: "Pour une longue dictée, appuie une fois sur \(free) (sans maintenir) : la pastille affiche ✕ pour annuler et ■ pour terminer. Appuie de nouveau sur \(free) ou clique sur ■ pour insérer. Tu peux aussi démarrer en cliquant sur la petite pastille en bas de l'écran.",
                  tryThis: "Appuie sur \(free), dicte deux ou trois phrases, puis appuie de nouveau sur \(free)."),
             Step(icon: "xmark.circle", title: "Annuler",
                  text: "Pendant un enregistrement, ⎋ (Échap) annule sans rien insérer. Presser une autre touche pendant le push-to-talk annule aussi (pour que ⌃⌘Q et compagnie fonctionnent normalement).",
@@ -39,8 +39,11 @@ struct TutorialView: View {
             Step(icon: "character.book.closed", title: "Dictionnaire et snippets",
                  text: "Dans Réglages › Dictionnaire : ajoute tes noms propres, corrige les mots que Whisper écorche, et crée des snippets (« mon adresse mail » → ton adresse complète).",
                  tryThis: "Ouvre les réglages, ajoute un snippet, puis dicte sa phrase déclencheuse ici."),
+            Step(icon: "sparkles", title: "Prompts IA",
+                 text: "Commence ta dictée par une phrase déclencheuse : l'IA d'Apple, en local, combine ta consigne écrite à l'avance avec ce que tu dis. Exemples fournis : « prompt engineering », « mail pro », « complète » (écrit la suite d'un mail déjà commencé). Tout se règle dans Inky › Prompts IA.",
+                 tryThis: "Dis : « Prompt engineering, je veux une recette rapide avec des pâtes et des tomates. »"),
             Step(icon: "checkmark.seal", title: "C'est parti !",
-                 text: "Inky fonctionne dans toutes les apps. La pastille, les sons, la mise en forme : tout se désactive dans les réglages, et le menu permet de mettre Inky en pause.",
+                 text: "Inky fonctionne dans toutes les apps. Ouvre Inky depuis le menu pour voir tes statistiques et ton historique. La pastille, les sons, la mise en forme, l'IA : tout se désactive, et le menu permet de mettre Inky en pause.",
                  tryThis: "Dicte ce que tu veux pour un dernier essai."),
         ]
     }

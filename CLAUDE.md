@@ -41,6 +41,10 @@ où se trouve le curseur, dans n'importe quelle app.
 | Releases | `scripts/release.sh X.Y.Z` en local (signature stable) ; workflow GitHub Actions en secours | Le compte GitHub ne peut pas lancer de runners macOS (facturation). La signature locale stable évite de perdre l'Accessibilité à chaque mise à jour. |
 | Mise en forme | Règles locales, sans IA (`InkyCore/Formatting`) | Hésitations, auto-corrections orales, commandes vocales, listes, dictionnaire, style messagerie. Le LLM (v0.3) viendra en complément. |
 | Dictionnaire | Fichier JSON `dictionary.json` | Lisible, facile à sauvegarder et à éditer à la main. |
+| IA (LLM) | **Apple Intelligence** (`FoundationModels`, module `InkyLLM`) derrière le protocole `LanguageModelProvider` | Local, 0 Mo à télécharger, parle français. Exige macOS 26+ et Apple Intelligence activé ; sinon repli : le texte dicté est inséré tel quel. Ollama ou une API pourront s'ajouter comme autre conformité. |
+| Prompts IA | Phrase déclencheuse **au début** de la dictée + consigne écrite à l'avance (`PromptTemplate`, `templates.json`) | Pas de raccourci en plus à retenir. Option « lire le texte déjà écrit » (AX) pour compléter un mail. |
+| Statistiques | Table SQLite `usage` séparée de l'historique, **sans texte** | Doit survivre à la purge de l'historique ; ne garde que mots, durée, app. Calcul pur dans `UsageSummary` (testé). |
+| Interface | Fenêtre principale à barre latérale (style Wispr Flow) + pastille noire | Une seule fenêtre pour accueil/stats, historique, dictionnaire, snippets, prompts IA, style et réglages. Thème dans `App/Design/Theme.swift`. |
 
 ## Architecture
 
@@ -66,8 +70,11 @@ où se trouve le curseur, dans n'importe quelle app.
 │                    AudioFileWriter                                    audio .m4a    │
 │                                                                                     │
 │  InkyUpdates : SemanticVersion · UpdateClient (GitHub) · UpdateInstaller            │
+│  InkyLLM : AppleLanguageModel (FoundationModels, macOS 26+)                         │
 │                         InkyCore : protocoles + types partagés                       │
 │      TranscriptionEngine · TextInserter · TextProcessor · AudioClip                 │
+│      LanguageModelProvider · Templates/ (PromptTemplate, TemplateMatcher)           │
+│      Stats/ (UsageSummary, WordCounter)                                             │
 │      Formatting/ : TextPipeline = TextCleanup → SelfCorrection → VoiceCommands      │
 │                    → ListFormatter → Replacements → style messagerie                │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -86,13 +93,18 @@ où se trouve le curseur, dans n'importe quelle app.
 4. `TranscriptionEngine` (WhisperKit, modèle **déjà chargé et préchauffé**) transcrit.
 5. `TextPipeline` met en forme selon les réglages et le dictionnaire, en tenant compte
    de l'app cible ; puis l'espacement intelligent lit le caractère avant le curseur (AX).
-6. `TextInserter` colle le texte dans l'app active puis restaure le presse-papier.
-7. `HistoryStore` enregistre l'entrée (et l'audio si l'option est activée).
+6. Si la dictée commence par la phrase déclencheuse d'un **prompt IA**
+   (`TemplateMatcher`), la consigne + la dictée (+ le texte déjà écrit dans le champ si
+   demandé) partent à `LanguageModelProvider` ; la pastille affiche « ✦ nom du modèle ».
+   En cas d'échec, on insère la dictée telle quelle (jamais rien perdre).
+7. `TextInserter` colle le texte dans l'app active puis restaure le presse-papier.
+8. `HistoryStore` enregistre l'entrée (et l'audio si l'option est activée) et, dans la
+   même transaction, une ligne de statistiques `usage` (mots de la dictée, pas du texte IA).
 
-### Où ajouter quoi (v0.2)
+### Où ajouter quoi
 
-- **LLM (Ollama / API)** : un nouveau `TextProcessor` dans un module `InkyLLM`, chaîné
-  après `TextCleanup`.
+- **Autre LLM (Ollama / API)** : une nouvelle conformité à `LanguageModelProvider`
+  dans `InkyLLM`, choisie dans les réglages.
 - **Modes** : un type `DictationMode` (modèle, langue, prompt, règles d'activation)
   résolu par le contrôleur au début de la dictée selon l'app au premier plan.
 - **Autre moteur** (whisper.cpp, Parakeet, SpeechAnalyzer) : une nouvelle conformité à
@@ -142,6 +154,11 @@ où se trouve le curseur, dans n'importe quelle app.
   Tout ce qui touche à l'AppKit démarre dans une `Task` au tour suivant.
 - **Deux instances.** Deux Inky en même temps colleraient le texte deux fois : au
   lancement, Inky ferme les autres instances.
+- **Apple Intelligence.** `SystemLanguageModel.default.availability` peut valoir
+  `modelNotReady` longtemps après l'activation (téléchargement du modèle par macOS).
+  Contexte limité (~4 000 tokens) : on coupe le texte du champ à 6 000 caractères.
+- **Locale.** L'app n'a pas de `.lproj` : `CFBundleDevelopmentRegion = fr` (project.yml)
+  pour que dates et jours soient en français.
 - **Mise à jour et TCC.** L'autorisation Accessibilité survit à une mise à jour
   seulement si la nouvelle version est signée par le même certificat.
 
@@ -150,7 +167,8 @@ où se trouve le curseur, dans n'importe quelle app.
 - Swift 6 (concurrence stricte). L'UI et l'orchestration sont `@MainActor` ; les
   moteurs sont des `actor`.
 - Pas de dépendance tierce sans l'inscrire dans le tableau ci-dessus.
-  Actuelles : WhisperKit (MIT), GRDB (MIT). Pas de Sparkle (voir Mises à jour).
+  Actuelles : WhisperKit (MIT), GRDB (MIT). Frameworks Apple : FoundationModels,
+  Charts. Pas de Sparkle (voir Mises à jour).
 - Les tests de logique pure vivent dans `Packages/InkyKit/Tests` : `swift test`.
 - Un commit par jalon minimum, messages en français.
 
@@ -169,4 +187,6 @@ scripts/release.sh 0.2.0                            # compile, signe, publie la 
 - Modèles : `~/Library/Application Support/Inky/Models/`
 - Historique : `~/Library/Application Support/Inky/history.sqlite`
 - Dictionnaire : `~/Library/Application Support/Inky/dictionary.json`
+- Prompts IA : `~/Library/Application Support/Inky/templates.json`
+- Statistiques : table `usage` de `history.sqlite`
 - Audio de l'historique : `~/Library/Application Support/Inky/Audio/`

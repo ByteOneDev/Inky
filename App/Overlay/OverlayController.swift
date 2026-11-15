@@ -16,6 +16,8 @@ final class OverlayModel {
         /// Le micro enregistre vraiment : forme d'onde + chronomètre.
         case recording(handsFree: Bool, startedAt: Date)
         case transcribing
+        /// Un modèle de prompt est appliqué par l'IA (nom du modèle).
+        case rewriting(String)
         case message(String, isError: Bool)
 
         var isCompact: Bool { self == .idle }
@@ -25,12 +27,16 @@ final class OverlayModel {
     var showsTimer = true
     /// Raccourci affiché dans l'infobulle de la pastille au repos.
     var hint = ""
+    /// La souris survole la pastille au repos : on affiche l'aide.
+    var isHovering = false
     /// Historique glissant des niveaux sonores (0…1), un par barre.
     var levels: [Float] = Array(repeating: 0, count: OverlayModel.barCount)
     /// Clic sur la pastille (au repos : démarrer en mains libres ; en cours : arrêter).
     var onClick: (() -> Void)?
+    /// Bouton ✕ de la pastille mains libres.
+    var onCancel: (() -> Void)?
 
-    static let barCount = 20
+    static let barCount = 16
 
     func push(level: Float) {
         levels.removeFirst()
@@ -65,8 +71,19 @@ final class OverlayController {
     private var hideTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
 
-    static let compactSize = CGSize(width: 46, height: 14)
-    static let fullSize = CGSize(width: 232, height: 44)
+    static let compactSize = CGSize(width: 44, height: 13)
+
+    /// Taille de la fenêtre pour chaque état (la capsule est dessinée 2 pt à l'intérieur).
+    static func size(for phase: OverlayModel.Phase, hovering: Bool, showsTimer: Bool) -> CGSize {
+        switch phase {
+        case .idle: hovering ? CGSize(width: 290, height: 30) : compactSize
+        case .preparing: CGSize(width: 140, height: 36)
+        case .recording(let handsFree, _): CGSize(width: (handsFree ? 190 : 150) + (showsTimer ? 34 : 0), height: 36)
+        case .transcribing: CGSize(width: 84, height: 36)
+        case .rewriting: CGSize(width: 250, height: 36)
+        case .message: CGSize(width: 340, height: 46)
+        }
+    }
     /// Marge par rapport aux bords de l'écran.
     private let margin: CGFloat = 14
 
@@ -86,6 +103,7 @@ final class OverlayController {
     func show(_ phase: OverlayModel.Phase) {
         hideTask?.cancel()
         if phase == .preparing { model.resetLevels() }
+        if phase != .idle { model.isHovering = false }
         model.phase = phase
         refresh()
     }
@@ -135,15 +153,24 @@ final class OverlayController {
 
     private func reposition() {
         guard let panel else { return }
-        let size = model.phase.isCompact ? Self.compactSize : Self.fullSize
+        let size = Self.size(for: model.phase, hovering: model.isHovering, showsTimer: model.showsTimer)
         let screen = FrontWindowLocator.screenOfFrontmostWindow() ?? NSScreen.main ?? NSScreen.screens[0]
         let frame = CGRect(origin: origin(for: position, size: size, on: screen), size: size)
-        if panel.frame != frame { panel.setFrame(frame, display: true) }
+        guard panel.frame != frame else { return }
+        // Petite animation quand la pastille change de taille sur le même écran.
+        if panel.isVisible, panel.frame.intersects(screen.frame) {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.16
+                panel.animator().setFrame(frame, display: true)
+            }
+        } else {
+            panel.setFrame(frame, display: true)
+        }
     }
 
     private func makePanel() -> NSPanel {
         let panel = NSPanel(
-            contentRect: CGRect(origin: .zero, size: Self.fullSize),
+            contentRect: CGRect(origin: .zero, size: Self.compactSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -157,8 +184,18 @@ final class OverlayController {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.isMovable = false
-        panel.contentView = ClickThroughHostingView(rootView: OverlayView(model: model))
+        let host = ClickThroughHostingView(rootView: OverlayView(model: model))
+        host.onHoverChange = { [weak self] hovering in self?.hoverChanged(hovering) }
+        panel.contentView = host
         return panel
+    }
+
+    /// Survol de la pastille au repos : elle s'agrandit pour afficher l'aide.
+    private func hoverChanged(_ hovering: Bool) {
+        let hovering = hovering && model.phase == .idle
+        guard model.isHovering != hovering else { return }
+        model.isHovering = hovering
+        reposition()
     }
 
     /// Calcule le coin bas-gauche de la pastille. En Cocoa, l'origine (0, 0) est
@@ -188,8 +225,33 @@ final class OverlayController {
 
 /// Vue hôte qui accepte le « premier clic » : sans ça, le premier clic sur une
 /// fenêtre d'une app inactive sert seulement à… l'activer.
+///
+/// Elle suit aussi le survol de la souris avec une zone de suivi « toujours
+/// active » : la pastille appartient à une app qui n'est jamais au premier plan.
 private final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
+    var onHoverChange: ((Bool) -> Void)?
+    private var hoverArea: NSTrackingArea?
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        // On ne retire que notre zone : SwiftUI a les siennes.
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        onHoverChange?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        onHoverChange?(false)
+    }
 }
 
 /// Trouve l'écran qui contient la fenêtre active de l'app au premier plan.

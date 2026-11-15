@@ -4,39 +4,14 @@ import InkyStorage
 import InkyTranscription
 import SwiftUI
 
-/// Fenêtre des réglages, en onglets.
-struct SettingsView: View {
-    let app: AppModel
-
-    var body: some View {
-        TabView {
-            GeneralSettings(app: app)
-                .tabItem { Label("Général", systemImage: "gearshape") }
-            AudioSettings(settings: app.settings, controller: app.controller)
-                .tabItem { Label("Audio", systemImage: "mic") }
-            ModelSettings(app: app)
-                .tabItem { Label("Modèles", systemImage: "cpu") }
-            DictionarySettings(vocabulary: app.vocabulary)
-                .tabItem { Label("Dictionnaire", systemImage: "character.book.closed") }
-            FormattingSettings(settings: app.settings)
-                .tabItem { Label("Mise en forme", systemImage: "text.badge.checkmark") }
-            HistorySettings(app: app)
-                .tabItem { Label("Historique", systemImage: "clock") }
-            AboutView(app: app)
-                .tabItem { Label("À propos", systemImage: "info.circle") }
-        }
-        .frame(width: 660, height: 520)
-    }
-}
-
 // MARK: - Général
 
-private struct GeneralSettings: View {
+struct GeneralSettings: View {
     let app: AppModel
 
     var body: some View {
         @Bindable var settings = app.settings
-        Form {
+        FormPage(title: "Général", subtitle: "Raccourcis, pastille et insertion du texte.") {
             Section {
                 Toggle("Inky activé", isOn: $settings.isEnabled)
                 Text("Désactivé : les raccourcis ne font plus rien et la pastille disparaît. Aussi accessible depuis le menu.")
@@ -75,6 +50,9 @@ private struct GeneralSettings: View {
                 Button("Aperçu") {
                     app.controller.overlay.flash("Aperçu de la pastille")
                 }
+                Text("Survole la petite pastille pour voir le raccourci ; en mains libres, ✕ annule et ■ termine.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Insertion") {
@@ -87,20 +65,19 @@ private struct GeneralSettings: View {
                 }
             }
         }
-        .formStyle(.grouped)
     }
 }
 
 // MARK: - Audio
 
-private struct AudioSettings: View {
+struct AudioSettings: View {
     let settings: AppSettings
     let controller: DictationController
     @State private var devices: [AudioInputDevice] = []
 
     var body: some View {
         @Bindable var settings = settings
-        Form {
+        FormPage(title: "Audio", subtitle: "Micro, diagnostic du démarrage et sons.") {
             Section("Micro") {
                 Picker("Périphérique d'entrée", selection: $settings.inputDeviceUID) {
                     Text("Micro par défaut du système").tag(String?.none)
@@ -135,20 +112,19 @@ private struct AudioSettings: View {
                 Toggle("Jouer un son quand le micro est prêt et à la fin", isOn: $settings.playSounds)
             }
         }
-        .formStyle(.grouped)
         .onAppear { devices = AudioDevices.inputDevices() }
     }
 }
 
 // MARK: - Modèles
 
-private struct ModelSettings: View {
+struct ModelSettings: View {
     let app: AppModel
 
     var body: some View {
         @Bindable var settings = app.settings
         let models = app.models
-        Form {
+        FormPage(title: "Transcription", subtitle: "Langue de dictée et modèle Whisper, exécuté localement sur le Neural Engine.") {
             Section("Langue") {
                 Picker("Langue de dictée", selection: $settings.language) {
                     ForEach(DictationLanguage.allCases) { Text($0.displayName).tag($0) }
@@ -173,7 +149,6 @@ private struct ModelSettings: View {
                 }
             }
         }
-        .formStyle(.grouped)
     }
 
     private var statusText: String {
@@ -235,57 +210,25 @@ private struct ModelRow: View {
     }
 }
 
-// MARK: - Historique
-
-private struct HistorySettings: View {
-    let app: AppModel
-    @State private var confirmClear = false
-
-    var body: some View {
-        @Bindable var settings = app.settings
-        Form {
-            Section("Conservation") {
-                Picker("Supprimer automatiquement après", selection: $settings.historyRetention) {
-                    ForEach(HistoryRetention.allCases) { Text($0.displayName).tag($0) }
-                }
-                Toggle("Conserver aussi l'audio des dictées", isOn: $settings.keepAudio)
-                Text("L'audio permet de réécouter une dictée. Environ 4 Ko par seconde, stocké uniquement sur ce Mac.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                Button("Ouvrir l'historique…") { app.windows.show(.history) }
-                Button("Effacer tout l'historique…", role: .destructive) { confirmClear = true }
-                    .disabled(app.controller.history == nil)
-            }
-        }
-        .formStyle(.grouped)
-        .confirmationDialog("Effacer tout l'historique ?", isPresented: $confirmClear) {
-            Button("Tout effacer", role: .destructive) { try? app.controller.history?.deleteAll() }
-        } message: {
-            Text("Les textes et les fichiers audio seront supprimés définitivement.")
-        }
-    }
-}
-
 // MARK: - À propos
 
-private struct AboutView: View {
+struct AboutView: View {
     let app: AppModel
 
     var body: some View {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-        Form {
+        FormPage(title: "À propos", subtitle: "Version, autorisations, mises à jour et confidentialité.") {
             Section {
                 LabeledContent("Version", value: version)
                 LabeledContent("Micro", value: app.permissions.microphone == .granted ? "Autorisé" : "Non autorisé")
                 LabeledContent("Accessibilité", value: app.permissions.accessibility ? "Autorisée" : "Non autorisée")
                 Button("Assistant d'autorisations…") { app.windows.show(.onboarding) }
+                Button("Revoir le tutoriel…") { app.windows.show(.tutorial) }
             }
             UpdatesSection(app: app)
 
             Section("Confidentialité") {
-                Text("Inky fonctionne entièrement sur ton Mac. Aucun audio ni texte n'est envoyé sur Internet, et l'app ne collecte aucune statistique. Accès réseau : le téléchargement des modèles depuis Hugging Face (quand tu le demandes) et, si l'option est active, la vérification des mises à jour sur GitHub, sans aucune donnée personnelle.")
+                Text("Inky fonctionne entièrement sur ton Mac. Aucun audio ni texte n'est envoyé sur Internet. Les statistiques de l'accueil sont calculées et stockées uniquement sur ce Mac. Les prompts IA utilisent Apple Intelligence en local. Accès réseau : le téléchargement des modèles depuis Hugging Face (quand tu le demandes) et, si l'option est active, la vérification des mises à jour sur GitHub, sans aucune donnée personnelle.")
                     .font(.callout)
                 Button("Afficher les données dans le Finder") {
                     _ = try? AppPaths.ensureExists(AppPaths.applicationSupport)
@@ -296,7 +239,6 @@ private struct AboutView: View {
                 Link("Code source (licence MIT)", destination: URL(string: "https://github.com/ByteOneDev/Inky")!)
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -363,150 +305,5 @@ private struct UpdatesSection: View {
             Button("Rechercher maintenant") { Task { await updates.check(userInitiated: true) } }
                 .disabled(updates.state == .checking)
         }
-    }
-}
-
-// MARK: - Dictionnaire
-
-private struct DictionarySettings: View {
-    let vocabulary: VocabularyStore
-    @State private var newWord = ""
-
-    var body: some View {
-        @Bindable var vocabulary = vocabulary
-        Form {
-            Section {
-                HStack {
-                    TextField("Ajouter un mot (ex. Docker, Kubernetes, Inky)", text: $newWord)
-                        .onSubmit(addWord)
-                    Button("Ajouter", action: addWord).disabled(newWord.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-                if !vocabulary.words.isEmpty {
-                    FlowWords(words: vocabulary.words) { word in vocabulary.words.removeAll { $0 == word } }
-                }
-                Toggle("Donner ces mots au modèle comme amorce", isOn: $vocabulary.useWordsAsPrompt)
-            } header: {
-                Text("Mots et noms propres")
-            } footer: {
-                Text("L'amorce aide Whisper à bien orthographier ces mots, mais peut ralentir un peu la transcription. Si un mot reste mal écrit, ajoute une correction ci-dessous.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            RuleSection(
-                title: "Corrections automatiques",
-                footer: "Remplace ce que Whisper écrit par la bonne orthographe, en mots entiers, sans tenir compte des majuscules.",
-                triggerLabel: "Whisper écrit…", replacementLabel: "Remplacer par…",
-                kind: .correction, vocabulary: vocabulary
-            )
-            RuleSection(
-                title: "Snippets",
-                footer: "Prononce la phrase déclencheuse : Inky insère le texte complet (adresse, signature, lien…).",
-                triggerLabel: "Quand je dis…", replacementLabel: "Insérer…",
-                kind: .snippet, vocabulary: vocabulary
-            )
-        }
-        .formStyle(.grouped)
-    }
-
-    private func addWord() {
-        let word = newWord.trimmingCharacters(in: .whitespaces)
-        guard !word.isEmpty, !vocabulary.words.contains(word) else { return }
-        vocabulary.words.append(word)
-        newWord = ""
-    }
-}
-
-/// Mots du dictionnaire affichés en « jetons » supprimables.
-private struct FlowWords: View {
-    let words: [String]
-    let onDelete: (String) -> Void
-
-    var body: some View {
-        // Grille adaptative : autant de colonnes que la largeur le permet.
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), alignment: .leading)], alignment: .leading, spacing: 6) {
-            ForEach(words, id: \.self) { word in
-                HStack(spacing: 4) {
-                    Text(word).lineLimit(1)
-                    Button { onDelete(word) } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(.quaternary, in: Capsule())
-            }
-        }
-    }
-}
-
-private struct RuleSection: View {
-    let title: String
-    let footer: String
-    let triggerLabel: String
-    let replacementLabel: String
-    let kind: ReplacementRule.Kind
-    let vocabulary: VocabularyStore
-
-    var body: some View {
-        @Bindable var vocabulary = vocabulary
-        Section {
-            ForEach($vocabulary.rules) { $rule in
-                if rule.kind == kind {
-                    HStack(alignment: .top) {
-                        Toggle("", isOn: $rule.isEnabled).labelsHidden()
-                        TextField(triggerLabel, text: $rule.trigger)
-                        Image(systemName: "arrow.right").foregroundStyle(.secondary).padding(.top, 3)
-                        TextField(replacementLabel, text: $rule.replacement, axis: .vertical)
-                            .lineLimit(1...4)
-                        Button { vocabulary.remove(ruleID: rule.id) } label: { Image(systemName: "trash") }
-                            .buttonStyle(.borderless)
-                    }
-                }
-            }
-            Button("Ajouter") { vocabulary.addRule(kind: kind) }
-        } header: {
-            Text(title)
-        } footer: {
-            Text(footer).font(.caption).foregroundStyle(.secondary)
-        }
-    }
-}
-
-// MARK: - Mise en forme
-
-private struct FormattingSettings: View {
-    let settings: AppSettings
-
-    var body: some View {
-        @Bindable var settings = settings
-        Form {
-            Section {
-                Toggle("Supprimer les hésitations (« euh », « hum »…)", isOn: $settings.formatting.removeFillers)
-                Toggle("Auto-corrections orales (« 14 h, non plutôt 15 h » → « 15 h »)", isOn: $settings.formatting.selfCorrections)
-                Toggle("Commandes vocales (« à la ligne », « point d'interrogation »…)", isOn: $settings.formatting.voiceCommands)
-                Toggle("Listes numérotées (« premièrement… deuxièmement… »)", isOn: $settings.formatting.numberedLists)
-            } header: {
-                Text("Nettoyage et mise en forme")
-            } footer: {
-                Text("Marqueurs de correction reconnus : « non plutôt », « ou plutôt », « je veux dire », « pardon », « enfin non », « no wait », « I mean ».")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            Section {
-                Toggle("Style messagerie : pas de point final (Messages, Slack, Discord, WhatsApp…)", isOn: $settings.formatting.casualStyleInMessaging)
-                Toggle("Espacement intelligent (ajoute une espace si tu dictes juste après un mot)", isOn: $settings.smartSpacing)
-            } header: {
-                Text("Adaptation à l'app")
-            } footer: {
-                Text("L'espacement intelligent lit le caractère avant le curseur via l'Accessibilité ; certaines apps ne le permettent pas.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            Section("Commandes vocales disponibles") {
-                Text("« à la ligne » · « nouveau paragraphe » · « point à la ligne » · « point d'interrogation » · « point d'exclamation » · « point-virgule » · « ouvrez / fermez les guillemets » · « ouvrez / fermez la parenthèse »")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
     }
 }

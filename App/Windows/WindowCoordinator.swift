@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Ouvre les fenêtres de l'app (Réglages, Historique, Bienvenue).
+/// Ouvre les fenêtres de l'app : la fenêtre principale (accueil, historique,
+/// réglages…), l'écran de bienvenue et le tutoriel.
 ///
 /// Pourquoi de l'AppKit plutôt que des scènes SwiftUI `Window` ? Une app sans
 /// Dock (`LSUIElement`) n'est jamais « active » par défaut : ses fenêtres
@@ -10,12 +11,11 @@ import SwiftUI
 @MainActor
 final class WindowCoordinator: NSObject, NSWindowDelegate {
     enum Kind: String {
-        case settings, history, onboarding, tutorial
+        case main, onboarding, tutorial
 
         var title: String {
             switch self {
-            case .settings: "Réglages d'Inky"
-            case .history: "Historique"
+            case .main: "Inky"
             case .onboarding: "Bienvenue dans Inky"
             case .tutorial: "Tutoriel Inky"
             }
@@ -27,6 +27,12 @@ final class WindowCoordinator: NSObject, NSWindowDelegate {
 
     init(app: AppModel) {
         self.app = app
+    }
+
+    /// Ouvre la fenêtre principale sur une page donnée.
+    func show(_ section: MainSection) {
+        app.navigation.section = section
+        show(.main)
     }
 
     func show(_ kind: Kind) {
@@ -44,8 +50,7 @@ final class WindowCoordinator: NSObject, NSWindowDelegate {
 
     private func makeWindow(_ kind: Kind) -> NSWindow {
         let root: AnyView = switch kind {
-        case .settings: AnyView(SettingsView(app: app))
-        case .history: AnyView(HistoryView(app: app))
+        case .main: AnyView(MainWindowView(app: app))
         case .onboarding: AnyView(OnboardingView(app: app))
         case .tutorial: AnyView(TutorialView(app: app))
         }
@@ -53,6 +58,15 @@ final class WindowCoordinator: NSObject, NSWindowDelegate {
         window.title = kind.title
         window.identifier = NSUserInterfaceItemIdentifier(kind.rawValue)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        if kind == .main {
+            // Barre de titre transparente : la barre latérale monte jusqu'en haut,
+            // les boutons de fenêtre flottent par-dessus (style des apps modernes).
+            window.styleMask.insert(.fullSizeContentView)
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.setContentSize(CGSize(width: 980, height: 680))
+            window.setFrameAutosaveName("InkyMainWindow")
+        }
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.center()

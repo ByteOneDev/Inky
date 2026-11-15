@@ -1,6 +1,7 @@
 import InkyCore
 import InkyInsertion
 import InkyHotkeys
+import InkyLLM
 import InkyStorage
 import InkyTranscription
 import SwiftUI
@@ -35,6 +36,8 @@ final class AppModel {
     let permissions = PermissionsManager()
     let models = ModelManager()
     let vocabulary = VocabularyStore()
+    let templates = TemplateStore()
+    let navigation = MainNavigation()
     let updates: UpdateManager
     let controller: DictationController
     @ObservationIgnored private(set) lazy var windows = WindowCoordinator(app: self)
@@ -53,7 +56,15 @@ final class AppModel {
             history = nil
         }
 
-        controller = DictationController(settings: settings, permissions: permissions, models: models, vocabulary: vocabulary, history: history)
+        controller = DictationController(
+            settings: settings,
+            permissions: permissions,
+            models: models,
+            vocabulary: vocabulary,
+            templates: templates,
+            history: history,
+            languageModel: AppleLanguageModel()
+        )
         updates = UpdateManager(settings: settings)
 
         // Attention : cet `init` s'exécute PENDANT que SwiftUI construit
@@ -63,6 +74,12 @@ final class AppModel {
         Task { @MainActor [controller, updates] in
             controller.start()
             updates.startAutomaticChecks()
+        }
+
+        // Pour le développement et les captures : `open Inky.app --args -openSection home`
+        // ouvre directement une page de la fenêtre principale.
+        if let raw = UserDefaults.standard.string(forKey: "openSection"), let section = MainSection(rawValue: raw) {
+            Task { @MainActor [weak self] in self?.windows.show(section) }
         }
 
         // Premier lancement, ou autorisation perdue (ex. après une mise à jour
@@ -101,6 +118,7 @@ extension DictationController {
         switch phase {
         case .recording: "waveform.circle.fill"
         case .transcribing: "ellipsis.circle"
+        case .rewriting: "sparkles"
         case .preparing: "waveform.circle"
         case .idle: hotkeysActive && settings.isEnabled ? "waveform" : "waveform.slash"
         }

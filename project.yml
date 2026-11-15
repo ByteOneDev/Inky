@@ -44,10 +44,14 @@ targets:
         product: InkyStorage
       - package: InkyKit
         product: InkyUpdates
+      - package: InkyKit
+        product: InkyLLM
     info:
       path: App/Info.plist
       properties:
         CFBundleName: Inky
+        # L'interface est en français : dates, jours et nombres aussi.
+        CFBundleDevelopmentRegion: fr
         CFBundleDisplayName: Inky
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)

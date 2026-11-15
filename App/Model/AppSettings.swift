@@ -77,6 +77,14 @@ final class AppSettings {
     var historyRetention: HistoryRetention { didSet { save(historyRetention, Keys.retention) } }
     var keepAudio: Bool { didSet { defaults.set(keepAudio, forKey: Keys.keepAudio) } }
 
+    // — Statistiques —
+    /// Compter les mots dictés (nombres seulement, jamais le texte), même si
+    /// l'historique est désactivé.
+    var collectStats: Bool { didSet { defaults.set(collectStats, forKey: Keys.collectStats) } }
+
+    // — Modèles de prompts (IA) —
+    var templatesEnabled: Bool { didSet { defaults.set(templatesEnabled, forKey: Keys.templatesEnabled) } }
+
     // — Mises à jour —
     var autoCheckUpdates: Bool { didSet { defaults.set(autoCheckUpdates, forKey: Keys.autoCheck) } }
     var autoInstallUpdates: Bool { didSet { defaults.set(autoInstallUpdates, forKey: Keys.autoInstall) } }
@@ -106,6 +114,8 @@ final class AppSettings {
         autoInstallUpdates = defaults.object(forKey: Keys.autoInstall) as? Bool ?? false
         historyRetention = Self.load(Keys.retention, from: defaults) ?? .oneMonth
         keepAudio = defaults.object(forKey: Keys.keepAudio) as? Bool ?? true
+        collectStats = defaults.object(forKey: Keys.collectStats) as? Bool ?? true
+        templatesEnabled = defaults.object(forKey: Keys.templatesEnabled) as? Bool ?? true
         hasCompletedOnboarding = defaults.bool(forKey: Keys.onboarding)
         hasSeenTutorial = defaults.bool(forKey: Keys.tutorial)
     }
@@ -143,5 +153,7 @@ final class AppSettings {
         static let retention = "history.retention"
         static let keepAudio = "history.keepAudio"
         static let onboarding = "onboarding.completed"
+        static let collectStats = "stats.enabled"
+        static let templatesEnabled = "templates.enabled"
     }
 }

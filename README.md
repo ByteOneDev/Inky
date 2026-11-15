@@ -14,6 +14,12 @@ relâches : le texte apparaît là où se trouve ton curseur, dans n'importe que
   « point d'interrogation »), listes numérotées, pas de point final dans les messageries.
 - 📖 **Dictionnaire personnel** : mots à reconnaître, corrections automatiques et
   **snippets** (« mon adresse mail » → ton adresse complète).
+- ✨ **Prompts IA** : commence ta dictée par une phrase déclencheuse (« prompt
+  engineering », « mail pro », « complète »…) et l'IA d'Apple, **en local**, combine ta
+  consigne écrite à l'avance avec ce que tu dis : prompt structuré, mail rédigé, suite
+  d'un mail déjà commencé. Nécessite macOS 26+ et Apple Intelligence activé.
+- 📊 **Statistiques** : mots dictés, vitesse en mots par minute, temps gagné, série de
+  jours, apps favorites. Calculées et stockées uniquement sur ton Mac.
 - 🗂 **Historique local** consultable, avec réécoute et suppression automatique réglable.
 - 🔄 **Mises à jour automatiques** depuis les releases GitHub, vérifiées (SHA-256 et
   signature). Désactivables.
@@ -33,11 +39,14 @@ relâches : le texte apparaît là où se trouve ton curseur, dans n'importe que
 Les deux raccourcis se changent dans **Réglages › Général** (modificateurs seuls ou
 combinaison avec une touche, par ex. ⌥Espace).
 
-Une petite pastille reste visible en bas de l'écran, même au-dessus des apps en plein
-écran (clic = dictée mains libres). Pendant une dictée, elle affiche **« Attends… »**
-(jaune) le temps que le micro démarre, puis la forme d'onde et la durée (rouge) :
-parle quand elle est rouge. Tout se désactive dans les réglages, et le menu permet de
-mettre Inky en pause.
+Une petite pastille noire reste visible en bas de l'écran, même au-dessus des apps en
+plein écran (survol = aide, clic = dictée mains libres). Pendant une dictée, elle
+affiche **« Attends… »** le temps que le micro démarre, puis un point rouge et la forme
+d'onde : parle à ce moment-là. En mains libres, ✕ annule et ■ termine. Tout se
+désactive dans les réglages, et le menu permet de mettre Inky en pause.
+
+Le menu **Ouvrir Inky…** affiche la fenêtre principale : accueil avec tes statistiques,
+historique, dictionnaire, snippets, prompts IA, style et réglages.
 
 ## Installation (release)
 
@@ -68,15 +77,15 @@ mettre Inky en pause.
 | **Total** | **≈ 1 à 1,3 Go** | **≈ 1 Go** |
 
 Modèles plus légers disponibles : *Small compressé* (217 Mo), *Base* (146 Mo), *Tiny*
-(76 Mo). La v0.2 (reformulation par LLM local via Ollama) ajoutera un modèle de 2 à
-3 Go, optionnel.
+(76 Mo). Les prompts IA utilisent le modèle d'Apple Intelligence, déjà présent dans
+macOS : rien de plus à télécharger pour Inky.
 
 Pour tout supprimer : quitter Inky, supprimer l'app et le dossier
 `~/Library/Application Support/Inky/`.
 
 ## Compiler depuis les sources
 
-Publier une release depuis ton Mac : `scripts/release.sh 0.2.0` (tests, compilation,
+Publier une release depuis ton Mac : `scripts/release.sh 0.3.0` (tests, compilation,
 signature avec le certificat de `Local.xcconfig`, archive + SHA-256, release GitHub).
 
 Prérequis : macOS 14+, Apple Silicon, Xcode 16+ et [XcodeGen](https://github.com/yonaskolb/XcodeGen).
@@ -113,7 +122,10 @@ whisper.cpp / WhisperKit dans [docs/benchmark.md](docs/benchmark.md).
 - **v0.1** : dictée locale, raccourcis, pastille, gestionnaire de modèles, historique.
 - **v0.2** : mise en forme (auto-corrections, commandes vocales, listes), dictionnaire et
   snippets, pastille permanente, tutoriel, mises à jour automatiques.
-- **v0.3** : reformulation par LLM (Ollama en local, API en option), modes par app/URL.
+- **v0.3** : fenêtre principale façon Wispr Flow, statistiques, prompts IA (Apple
+  Intelligence en local), nouvelle pastille.
+- **v0.4** (idées) : mode commande sur le texte sélectionné, modes par app/URL, Ollama
+  ou API en option.
 - **Plus tard** : transcription de fichiers, mode commande, autres moteurs (whisper.cpp,
   Parakeet, SpeechAnalyzer d'Apple).
 

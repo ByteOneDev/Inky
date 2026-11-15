@@ -12,6 +12,9 @@ struct MenuContent: View {
 
         Text(statusText)
 
+        Button("Ouvrir Inky…") { app.windows.show(.home) }
+            .keyboardShortcut("o")
+
         if !app.permissions.allGranted {
             Button("⚠︎ Autorisations manquantes…") { app.windows.show(.onboarding) }
         }
@@ -47,11 +50,11 @@ struct MenuContent: View {
         } else {
             Button("Rechercher des mises à jour…") {
                 Task { await app.updates.check(userInitiated: true) }
-                app.windows.show(.settings)
+                app.windows.show(.about)
             }
         }
         Button("Tutoriel…") { app.windows.show(.tutorial) }
-        Button("Réglages…") { app.windows.show(.settings) }
+        Button("Réglages…") { app.windows.show(.general) }
             .keyboardShortcut(",")
 
         Divider()
@@ -66,6 +69,7 @@ struct MenuContent: View {
         case .preparing: return "Démarrage du micro…"
         case .recording: return "● Enregistrement…"
         case .transcribing: return "Transcription…"
+        case .rewriting: return "Rédaction par l'IA…"
         case .idle: break
         }
         switch controller.modelStatus {

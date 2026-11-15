@@ -3,6 +3,7 @@ import InkyAudio
 import InkyCore
 import InkyHotkeys
 import InkyInsertion
+import InkyLLM
 import InkyStorage
 import InkyTranscription
 import Observation
@@ -18,9 +19,9 @@ import os
 ///
 /// Machine à états :
 ///
-///     idle ─raccourci─▶ preparing ─micro prêt─▶ recording ─relâché─▶ transcribing ─▶ idle
-///                         │                       │                  (mise en forme,
-///                         └──── ⎋ / autre touche ─┴─▶ idle (annulé)   insertion, historique)
+///     idle ─raccourci─▶ preparing ─micro prêt─▶ recording ─relâché─▶ transcribing ─┬─────────────▶ idle
+///                         │                       │                  (mise en forme) └▶ rewriting ─┘
+///                         └──── ⎋ / autre touche ─┴─▶ idle (annulé)                   (modèle de prompt + IA)
 @MainActor
 @Observable
 final class DictationController {
@@ -32,6 +33,8 @@ final class DictationController {
         case preparing(Mode)
         case recording(Mode)
         case transcribing
+        /// Un modèle de prompt a été reconnu : l'IA rédige le texte final.
+        case rewriting
 
         var mode: Mode? {
             switch self {
@@ -61,6 +64,8 @@ final class DictationController {
     @ObservationIgnored let permissions: PermissionsManager
     @ObservationIgnored let models: ModelManager
     @ObservationIgnored let vocabulary: VocabularyStore
+    @ObservationIgnored let templates: TemplateStore
+    @ObservationIgnored let languageModel: any LanguageModelProvider
     @ObservationIgnored let history: HistoryStore?
     @ObservationIgnored let overlay = OverlayController()
     @ObservationIgnored let hotkeys = EventTapMonitor()
@@ -87,7 +92,9 @@ final class DictationController {
         permissions: PermissionsManager,
         models: ModelManager,
         vocabulary: VocabularyStore,
+        templates: TemplateStore,
         history: HistoryStore?,
+        languageModel: any LanguageModelProvider = AppleLanguageModel(),
         engine: any TranscriptionEngine = WhisperKitEngine(),
         inserter: any TextInserter = PasteboardInserter()
     ) {
@@ -95,6 +102,8 @@ final class DictationController {
         self.permissions = permissions
         self.models = models
         self.vocabulary = vocabulary
+        self.templates = templates
+        self.languageModel = languageModel
         self.history = history
         self.engine = engine
         self.inserter = inserter
@@ -113,6 +122,7 @@ final class DictationController {
             Task { @MainActor in self?.microphoneReady(after: delay) }
         }
         overlay.model.onClick = { [weak self] in self?.overlayClicked() }
+        overlay.model.onCancel = { [weak self] in self?.cancelRecording() }
     }
 
     // MARK: - Démarrage
@@ -124,6 +134,11 @@ final class DictationController {
         startHotkeysIfPossible()
         Task { await loadSelectedModel() }
         purgeHistory()
+        #if DEBUG
+        // `--args -overlayDemo YES` : fait défiler les états de la pastille
+        // (pour vérifier son apparence sans dicter).
+        if UserDefaults.standard.bool(forKey: "overlayDemo") { runOverlayDemo() }
+        #endif
 
         // Réagir aux changements de réglages et d'état, sans que les vues aient
         // à prévenir le contrôleur.
@@ -180,7 +195,7 @@ final class DictationController {
         hotkeys.stateMachine.pushToTalk = settings.pushToTalkShortcut
         hotkeys.stateMachine.handsFree = settings.handsFreeShortcut
         hotkeys.stateMachine.reset()
-        overlay.model.hint = "Maintiens \(settings.pushToTalkShortcut.displayString) pour dicter, ou clique pour démarrer"
+        overlay.model.hint = "Clique ou maintiens \(settings.pushToTalkShortcut.displayString) pour dicter"
     }
 
     private func applyOverlaySettings() {
@@ -244,7 +259,7 @@ final class DictationController {
         switch phase {
         case .idle: startRecording(.handsFree)
         case .preparing, .recording: finishRecording()
-        case .transcribing: break
+        case .transcribing, .rewriting: break
         }
     }
 
@@ -362,10 +377,19 @@ final class DictationController {
             appName: targetApp?.localizedName,
             language: output.language
         )
-        var text = TextPipeline(options: settings.formatting, rules: vocabulary.rules).format(output.text, context: context)
-        guard !text.isEmpty else {
+        let spoken = TextPipeline(options: settings.formatting, rules: vocabulary.rules).format(output.text, context: context)
+        guard !spoken.isEmpty else {
             overlay.flash("Rien de compréhensible n'a été entendu.")
             return
+        }
+
+        // Modèle de prompt : la dictée commence-t-elle par une phrase déclencheuse ?
+        var text = spoken
+        var notice: String?
+        if settings.templatesEnabled, let match = TemplateMatcher.match(spoken, in: templates.templates) {
+            guard let result = await applyTemplate(match) else { return }
+            text = result.text
+            notice = result.notice
         }
         if settings.smartSpacing, AXIsProcessTrusted() {
             text = FocusedTextContext.applySmartSpacing(to: text, previous: FocusedTextContext.characterBeforeCursor())
@@ -379,7 +403,11 @@ final class DictationController {
         }
         do {
             try await inserter.insert(text)
-            overlay.hide()
+            if let notice {
+                overlay.flash(notice, isError: true, duration: .seconds(4))
+            } else {
+                overlay.hide()
+            }
         } catch .secureInputActive {
             overlay.flash("Champ sécurisé : texte copié, colle-le avec ⌘V.", isError: true, duration: .seconds(4))
         } catch .accessibilityNotGranted {
@@ -391,11 +419,71 @@ final class DictationController {
         let latency = Date().timeIntervalSince(stoppedAt)
         logger.info("Dictée : \(clip.duration, format: .fixed(precision: 1), privacy: .public) s audio, transcription \(output.processingTime, format: .fixed(precision: 2), privacy: .public) s, fin de parole → insertion \(latency, format: .fixed(precision: 2), privacy: .public) s")
 
-        saveToHistory(text: text, raw: output.text, clip: clip, output: output)
+        saveToHistory(text: text, spoken: spoken, raw: output.text, clip: clip, output: output)
     }
 
-    private func saveToHistory(text: String, raw: String, clip: AudioClip, output: TranscriptionOutput) {
-        guard let history, settings.historyRetention != .never else { return }
+    // MARK: - Modèles de prompts
+
+    /// Applique un modèle de prompt reconnu. Renvoie le texte à insérer (et un
+    /// éventuel avertissement à afficher), ou `nil` s'il n'y a rien à insérer.
+    ///
+    /// En cas de problème avec l'IA, on n'insère pas rien : on retombe sur le
+    /// texte dicté, tel quel, pour ne jamais perdre ce que l'utilisateur a dit.
+    private func applyTemplate(_ match: TemplateMatch) async -> (text: String, notice: String?)? {
+        let template = match.template
+        guard template.usesAI else {
+            return (TemplateRenderer.fill(template, content: match.content), nil)
+        }
+        if match.content.isEmpty && !template.includesFieldText {
+            overlay.flash("Dis ta demande juste après « \(template.trigger) ».")
+            return nil
+        }
+        if case .unavailable(let reason) = languageModel.availability() {
+            return match.content.isEmpty ? nil : (match.content, "IA indisponible : \(reason)")
+        }
+
+        phase = .rewriting
+        overlay.show(.rewriting(template.name))
+        // Le texte déjà écrit dans le champ (pour « compléter un mail »).
+        let fieldText = template.includesFieldText && AXIsProcessTrusted()
+            ? FocusedTextContext.textBeforeCursor(maxLength: 6000)
+            : nil
+        let request = TemplateRenderer.request(for: template, content: match.content, fieldText: fieldText)
+        let started = Date()
+        do {
+            let response = TemplateRenderer.cleanResponse(try await languageModel.generate(request))
+            logger.info("Modèle de prompt appliqué en \(Date().timeIntervalSince(started), format: .fixed(precision: 2), privacy: .public) s")
+            if response.isEmpty { return match.content.isEmpty ? nil : (match.content, "L'IA n'a rien renvoyé : texte dicté inséré tel quel.") }
+            return (response, nil)
+        } catch {
+            logger.error("Modèle de prompt : \(error.localizedDescription, privacy: .public)")
+            let message = "IA : \(error.localizedDescription) Texte dicté inséré tel quel."
+            return match.content.isEmpty ? nil : (match.content, message)
+        }
+    }
+
+    // MARK: - Historique et statistiques
+
+    /// - Parameters:
+    ///   - text: texte inséré (éventuellement rédigé par l'IA) ;
+    ///   - spoken: texte dicté, mis en forme : c'est lui qui compte pour les statistiques.
+    private func saveToHistory(text: String, spoken: String, raw: String, clip: AudioClip, output: TranscriptionOutput) {
+        guard let history else { return }
+        let usage = settings.collectStats
+            ? UsageRecord(
+                wordCount: WordCounter.count(spoken),
+                audioDuration: clip.duration,
+                appName: targetApp?.localizedName,
+                appBundleID: targetApp?.bundleIdentifier
+            )
+            : nil
+        guard settings.historyRetention != .never else {
+            // Historique désactivé : seulement les nombres, si les stats sont actives.
+            if let usage {
+                Task.detached(priority: .utility) { try? history.addUsage(usage) }
+            }
+            return
+        }
         let keepAudio = settings.keepAudio
         let entry = HistoryEntry(
             text: text,
@@ -414,7 +502,7 @@ final class DictationController {
                 if let name = entry.audioFileName {
                     try AudioFileWriter.writeM4A(clip, to: history.audioDirectory.appending(path: name))
                 }
-                try history.add(entry)
+                try history.add(entry, usage: usage)
             } catch {
                 logger.error("Historique : \(error.localizedDescription, privacy: .public)")
             }
@@ -430,6 +518,29 @@ final class DictationController {
     }
 
     // MARK: - Utilitaires
+
+    #if DEBUG
+    private func runOverlayDemo() {
+        Task { @MainActor [overlay] in
+            let steps: [OverlayModel.Phase] = [
+                .preparing,
+                .recording(handsFree: false, startedAt: Date()),
+                .recording(handsFree: true, startedAt: Date()),
+                .transcribing,
+                .rewriting("Prompt pour une IA"),
+                .message("IA indisponible : le modèle n'est pas encore prêt.", isError: true),
+            ]
+            for step in steps {
+                overlay.show(step)
+                for _ in 0..<30 {
+                    overlay.model.push(level: Float.random(in: 0...0.5))
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+            }
+            overlay.hide()
+        }
+    }
+    #endif
 
     private func playSound(_ name: String) {
         guard settings.playSounds else { return }
