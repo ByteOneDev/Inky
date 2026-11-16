@@ -69,7 +69,13 @@ final class DictationController {
     @ObservationIgnored let history: HistoryStore?
     @ObservationIgnored let overlay = OverlayController()
     @ObservationIgnored let hotkeys = EventTapMonitor()
-    @ObservationIgnored private let engine: any TranscriptionEngine
+    /// Deux moteurs possibles ; un seul est chargé en mémoire à la fois.
+    @ObservationIgnored private let whisperEngine: any TranscriptionEngine
+    @ObservationIgnored private let appleEngine: any TranscriptionEngine
+    /// Moteur du modèle choisi.
+    private var engine: any TranscriptionEngine {
+        settings.selectedModelID == AppleSpeechEngine.modelID ? appleEngine : whisperEngine
+    }
     @ObservationIgnored private let inserter: any TextInserter
     @ObservationIgnored private let recorder = AudioRecorder()
     @ObservationIgnored private let media = MediaPlayback()
@@ -96,7 +102,8 @@ final class DictationController {
         templates: TemplateStore,
         history: HistoryStore?,
         languageModel: any LanguageModelProvider = AppleLanguageModel(),
-        engine: any TranscriptionEngine = WhisperKitEngine(),
+        whisperEngine: any TranscriptionEngine = WhisperKitEngine(),
+        appleEngine: any TranscriptionEngine = AppleSpeechEngine(),
         inserter: any TextInserter = PasteboardInserter()
     ) {
         self.settings = settings
@@ -106,7 +113,8 @@ final class DictationController {
         self.templates = templates
         self.languageModel = languageModel
         self.history = history
-        self.engine = engine
+        self.whisperEngine = whisperEngine
+        self.appleEngine = appleEngine
         self.inserter = inserter
 
         // Le callback de l'event tap doit rendre la main en quelques
@@ -217,7 +225,8 @@ final class DictationController {
         let id = settings.selectedModelID
         guard models.isInstalled(id) else {
             loadedModelID = nil
-            await engine.unload()
+            await whisperEngine.unload()
+            await appleEngine.unload()
             modelStatus = .notInstalled
             return
         }
@@ -226,6 +235,10 @@ final class DictationController {
         loadedModelID = id
         let name = ModelCatalog.info(for: id)?.displayName ?? id
         modelStatus = .loading(name)
+        // Libérer l'autre moteur : Whisper occupe ~1 Go de mémoire.
+        let engine = self.engine
+        let other = id == AppleSpeechEngine.modelID ? whisperEngine : appleEngine
+        await other.unload()
         do {
             try await engine.load(modelAt: models.folder(for: id))
             // L'utilisateur a pu changer de modèle pendant le chargement.
@@ -369,7 +382,7 @@ final class DictationController {
 
     private func transcribeAndInsert(_ clip: AudioClip, stoppedAt: Date) async {
         defer { phase = .idle }
-        let options = TranscriptionOptions(language: settings.language, prompt: vocabulary.prompt)
+        let options = TranscriptionOptions(language: settings.language, prompt: vocabulary.prompt, vocabulary: vocabulary.words)
 
         let output: TranscriptionOutput
         do {
@@ -398,6 +411,12 @@ final class DictationController {
             guard let result = await applyTemplate(match) else { return }
             text = result.text
             notice = result.notice
+        } else {
+            switch restructuringPlan(for: spoken) {
+            case .ai: text = await restructure(spoken)
+            case .paragraphs: text = Restructuring.paragraphs(spoken)
+            case .none: break
+            }
         }
         if settings.smartSpacing, AXIsProcessTrusted() {
             text = FocusedTextContext.applySmartSpacing(to: text, previous: FocusedTextContext.characterBeforeCursor())
@@ -428,6 +447,53 @@ final class DictationController {
         logger.info("Dictée : \(clip.duration, format: .fixed(precision: 1), privacy: .public) s audio, transcription \(output.processingTime, format: .fixed(precision: 2), privacy: .public) s, fin de parole → insertion \(latency, format: .fixed(precision: 2), privacy: .public) s")
 
         saveToHistory(text: text, spoken: spoken, raw: output.text, clip: clip, output: output)
+    }
+
+    // MARK: - Restructuration (listes, sous-niveaux, paragraphes)
+
+    /// Apps où un texte sur plusieurs lignes serait dangereux : dans un
+    /// terminal, un retour à la ligne exécute la commande.
+    static let terminals: Set<String> = [
+        "com.apple.Terminal", "com.googlecode.iterm2", "dev.warp.Warp-Stable",
+        "com.mitchellh.ghostty", "net.kovidgoyal.kitty", "io.alacritty",
+    ]
+
+    private func restructuringPlan(for text: String) -> Restructuring.Plan {
+        guard settings.smartStructure else { return .none }
+        if let bundleID = targetApp?.bundleIdentifier, Self.terminals.contains(bundleID) { return .none }
+        let plan = Restructuring.plan(for: text)
+        // Sans IA disponible : seulement les paragraphes par règles.
+        if plan == .ai, !languageModel.availability().isAvailable { return .none }
+        return plan
+    }
+
+    /// Restructure la dictée avec l'IA. Au moindre doute (trop lent, infidèle,
+    /// erreur), on garde la dictée telle quelle : on ne perd jamais de texte.
+    private func restructure(_ text: String) async -> String {
+        phase = .rewriting
+        overlay.show(.rewriting("Mise en forme"))
+        let started = Date()
+        let model = languageModel
+        let request = Restructuring.request(for: text)
+        // Délai maximal : au-delà, mieux vaut insérer la dictée brute tout de suite.
+        let timeout = max(4.0, Double(WordCounter.count(text)) / 40)
+        let response: String? = await withTaskGroup(of: String?.self) { group in
+            group.addTask { try? await model.generate(request) }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(timeout))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        let elapsed = Date().timeIntervalSince(started)
+        guard let response, let accepted = Restructuring.accept(response, original: text) else {
+            logger.info("Restructuration ignorée (\(elapsed, format: .fixed(precision: 2), privacy: .public) s)")
+            return text
+        }
+        logger.info("Restructuration en \(elapsed, format: .fixed(precision: 2), privacy: .public) s")
+        return accepted
     }
 
     // MARK: - Modèles de prompts

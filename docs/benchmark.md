@@ -49,3 +49,40 @@ brew install whisper-cpp
 whisper-cli -m ggml-large-v3-turbo-q5_0.bin -f court.wav -l fr -nt
 # WhisperKit : petit exécutable qui utilise InkyTranscription (load puis 5 × transcribe)
 ```
+
+
+## 2026-11-16 — Dictée Apple (SpeechAnalyzer) vs WhisperKit, sur de vraies dictées
+
+Six dictées réelles de l'utilisateur (micro du Mac, français mêlé de mots anglais),
+MacBook M4, macOS 27. WhisperKit : temps relevés dans l'historique (modèle 626 Mo).
+Apple : `SpeechTranscriber(locale: fr_FR, preset: .transcription)`, fichier entier.
+
+| Audio | WhisperKit 626 Mo | Apple `SpeechTranscriber` | Apple `DictationTranscriber` |
+|---|---|---|---|
+| 2,8 s | 1,20 s | 0,30 s | 0,24 s |
+| 8,9 s | 1,62 s | 0,14 s | 0,39 s |
+| 12,7 s | 1,76 s | 0,18 s | 0,54 s |
+| 18,1 s | 1,87 s | 0,23 s | 0,37 s |
+| 43,6 s | 2,65 s | 0,40 s | 0,87 s |
+| 111,6 s | 8,06 s | 1,06 s | 2,56 s |
+
+Qualité : proche. Whisper ponctue mieux les longues phrases et retire les mots
+répétés ; Apple garde les bégaiements (« l'ancien l'ancien ») et fait des phrases
+plus longues, mais a mieux reconnu certains noms (« minpack.fr »).
+`DictationTranscriber` est plus lent et fait plus d'erreurs (« sûr 1000 pack.fr »).
+
+**Décision** : `SpeechTranscriber` par défaut (macOS 26+), complété par la
+suppression des mots répétés (`TextCleanup`) et la restructuration par IA, qui
+reponctue les longues phrases (~1,5 s, seulement quand c'est utile). Whisper reste
+proposé pour la qualité maximale. Parakeet (NVIDIA, via FluidAudio) n'a pas été
+retenu : Apple est déjà sous la demi-seconde, sans dépendance ni téléchargement.
+
+### Restructuration par Apple Intelligence (même machine)
+
+| Cas | Plan | Temps |
+|---|---|---|
+| Phrase courte (< 12 mots, ou ponctuée) | rien | 0 s |
+| Longue phrase sans ponctuation (43,6 s d'audio) | IA | 1,4 s |
+| Liste de courses avec sous-niveaux | IA | 1,4 s |
+| Réunion, trois points | IA | 2,6 s |
+| Dictée de 112 s (~300 mots) | paragraphes par règles | < 1 ms (l'IA prenait 9,4 s) |

@@ -53,9 +53,9 @@ public final class ModelManager {
     /// Relit le disque pour savoir quels modèles sont présents.
     public func refresh() {
         let fm = FileManager.default
-        installed = Set(ModelCatalog.models.map(\.id).filter { id in
-            fm.fileExists(atPath: folder(for: id).appending(path: Self.completionMarker).path)
-        })
+        installed = Set(ModelCatalog.models.filter { info in
+            info.isSystem || fm.fileExists(atPath: folder(for: info.id).appending(path: Self.completionMarker).path)
+        }.map(\.id))
     }
 
     /// Lance le téléchargement d'un modèle (sans bloquer l'interface).

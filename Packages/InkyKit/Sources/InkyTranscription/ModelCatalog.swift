@@ -9,6 +9,8 @@ public struct WhisperModelInfo: Identifiable, Hashable, Sendable {
     public let sizeMB: Int
     public let summary: String
     public let isRecommended: Bool
+    /// Intégré au système (rien à télécharger ni à supprimer).
+    public var isSystem = false
 }
 
 /// Liste **choisie** de modèles. Le dépôt en contient une trentaine (versions
@@ -21,38 +23,48 @@ public struct WhisperModelInfo: Identifiable, Hashable, Sendable {
 public enum ModelCatalog {
     public static let repository = "argmaxinc/whisperkit-coreml"
 
-    public static let models: [WhisperModelInfo] = [
+    /// Le moteur de dictée d'Apple (macOS 26+), proposé en premier.
+    public static let apple = WhisperModelInfo(
+        id: AppleSpeechEngine.modelID,
+        displayName: "Dictée Apple (ultra-rapide)",
+        sizeMB: 0,
+        summary: "Recommandé. Intégré à macOS : 8 à 12 fois plus rapide que Whisper, rien à télécharger. Ponctuation un peu moins fine.",
+        isRecommended: true,
+        isSystem: true
+    )
+
+    public static let models: [WhisperModelInfo] = (AppleSpeechEngine.isSupported ? [apple] : []) + [
         WhisperModelInfo(
             id: "openai_whisper-large-v3-v20240930_626MB",
-            displayName: "Large v3 Turbo (compressé)",
+            displayName: "Whisper Large v3 Turbo (compressé)",
             sizeMB: 626,
-            summary: "Recommandé. Excellente qualité en français et en anglais, rapide sur Apple Silicon.",
-            isRecommended: true
+            summary: "Qualité maximale : meilleure ponctuation, retire les répétitions. Plus lent (1 à 3 s par dictée).",
+            isRecommended: !AppleSpeechEngine.isSupported
         ),
         WhisperModelInfo(
             id: "openai_whisper-large-v3-v20240930",
-            displayName: "Large v3 Turbo",
+            displayName: "Whisper Large v3 Turbo",
             sizeMB: 1619,
             summary: "Version non compressée : qualité maximale, 2,5 × plus lourde, gain faible.",
             isRecommended: false
         ),
         WhisperModelInfo(
             id: "openai_whisper-small_216MB",
-            displayName: "Small (compressé)",
+            displayName: "Whisper Small (compressé)",
             sizeMB: 217,
             summary: "Léger. Correct pour des phrases simples, plus d'erreurs sur les noms propres.",
             isRecommended: false
         ),
         WhisperModelInfo(
             id: "openai_whisper-base",
-            displayName: "Base",
+            displayName: "Whisper Base",
             sizeMB: 146,
             summary: "Très rapide, qualité moyenne en français.",
             isRecommended: false
         ),
         WhisperModelInfo(
             id: "openai_whisper-tiny",
-            displayName: "Tiny",
+            displayName: "Whisper Tiny",
             sizeMB: 76,
             summary: "Pour tester. Nombreuses erreurs.",
             isRecommended: false

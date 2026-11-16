@@ -152,6 +152,17 @@ struct StylePage: View {
                 }
             }
 
+            SectionLabel(text: "Restructuration").padding(.top, 6)
+            Card {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(isOn: $settings.smartStructure) {
+                        Text("Restructurer automatiquement les listes et les longs textes (IA)")
+                    }
+                    Text("Quand une dictée ressemble à une énumération ou dépasse ~45 mots, l'IA d'Apple (en local) la remet en forme : listes à puces « • », sous-niveaux « ◦ », paragraphes, ponctuation. Les phrases courtes restent instantanées. L'IA ne change pas tes mots : si son résultat s'en écarte, ta dictée est insérée telle quelle. Jamais dans un terminal.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
             SectionLabel(text: "Mise en forme").padding(.top, 6)
             Card {
                 VStack(alignment: .leading, spacing: 10) {

@@ -3,10 +3,13 @@
 Dictée vocale **100 % locale** pour macOS. Tu maintiens un raccourci, tu parles, tu
 relâches : le texte apparaît là où se trouve ton curseur, dans n'importe quelle app.
 
-- 🔒 **Privé** : la transcription tourne sur ton Mac (Whisper via CoreML / Neural Engine).
+- 🔒 **Privé** : la transcription tourne sur ton Mac (dictée Apple ou Whisper, sur le Neural Engine).
   Aucun audio, aucun texte, aucune statistique n'est envoyé sur Internet.
-- ⚡ **Rapide** : le modèle reste chargé en mémoire ; une phrase courte est insérée en
-  moins d'une seconde sur Apple Silicon.
+- ⚡ **Rapide** : avec la dictée Apple (macOS 26+), 0,2 à 0,4 s pour transcrire jusqu'à
+  45 s de parole. Whisper reste disponible pour une qualité maximale.
+- 📝 **Restructuration automatique** : une énumération dictée devient une liste à puces
+  avec sous-niveaux, un long texte est découpé en paragraphes et reponctué. L'IA
+  (locale) n'intervient que quand c'est utile : les phrases courtes restent instantanées.
 - 🇫🇷🇬🇧 **Français par défaut**, anglais ou détection automatique en option. Les mots
   anglais glissés dans une phrase française sont bien transcrits.
 - 🧹 **Mise en forme automatique** : hésitations retirées, auto-corrections orales

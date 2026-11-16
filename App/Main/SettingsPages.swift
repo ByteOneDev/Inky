@@ -198,7 +198,8 @@ private struct ModelRow: View {
                             .background(.green.opacity(0.2), in: Capsule())
                     }
                 }
-                Text("\(info.summary) — \(info.sizeMB) Mo").font(.caption).foregroundStyle(.secondary)
+                Text(info.isSystem ? "\(info.summary) — intégré à macOS" : "\(info.summary) — \(info.sizeMB) Mo")
+                    .font(.caption).foregroundStyle(.secondary)
                 if let progress = models.downloads[info.id] {
                     ProgressView(value: progress).controlSize(.small)
                     DownloadStallHint(models: models, modelID: info.id)
@@ -212,12 +213,14 @@ private struct ModelRow: View {
                 if !selected {
                     Button("Utiliser") { app.settings.selectedModelID = info.id }
                 }
-                Button(role: .destructive) {
-                    models.delete(info.id)
-                } label: {
-                    Image(systemName: "trash")
+                if !info.isSystem {
+                    Button(role: .destructive) {
+                        models.delete(info.id)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .help("Supprimer du disque")
                 }
-                .help("Supprimer du disque")
             } else {
                 Button("Télécharger") { models.download(info.id) }
             }

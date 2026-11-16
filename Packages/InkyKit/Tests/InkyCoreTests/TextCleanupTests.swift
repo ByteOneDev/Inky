@@ -43,3 +43,18 @@ struct AudioClipTests {
         #expect(AudioClip(samples: []).rms == 0)
     }
 }
+
+struct StutterTests {
+    @Test func removesRepeatedWords() {
+        let cleanup = TextCleanup()
+        #expect(cleanup.clean("Tu as mon accord pour supprimer l'ancien l'ancien MCP") == "Tu as mon accord pour supprimer l'ancien MCP")
+        #expect(cleanup.clean("J'aimerais que tu tu ajoutes une fonction, sur sur le site") == "J'aimerais que tu ajoutes une fonction, sur le site")
+        #expect(cleanup.clean("Je, je le mettrai moi-même") == "Je le mettrai moi-même")
+    }
+
+    @Test func keepsLegitimateRepetitions() {
+        let cleanup = TextCleanup()
+        #expect(cleanup.clean("Nous nous sommes vus, c'est très très bien") == "Nous nous sommes vus, c'est très très bien")
+        #expect(cleanup.clean("Il a dit oui oui") == "Il a dit oui oui")
+    }
+}

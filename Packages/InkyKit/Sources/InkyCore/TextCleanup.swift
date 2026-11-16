@@ -8,7 +8,8 @@ import Foundation
 ///    communauté d'Amara.org », « Merci d'avoir regardé »…).
 /// 2. **Balises d'ambiance** : « [Musique] », « (rires) », « *applaudissements* ».
 /// 3. **Hésitations** : « euh », « hum »… (les modèles turbo en retirent déjà
-///    beaucoup, on finit le travail).
+///    beaucoup, on finit le travail), et **mots bégayés** : « tu tu ajoutes »,
+///    « l'ancien l'ancien pack » (le moteur d'Apple les garde tous).
 public struct TextCleanup: TextProcessor {
     public var removeFillers: Bool
 
@@ -53,6 +54,18 @@ public struct TextCleanup: TextProcessor {
             result = result.replacingOccurrences(
                 of: #"(?i)\b(euh+|heu+|hum+|hmm+|uh+|um+|erm+)\b[,.]?\s*"#,
                 with: "",
+                options: .regularExpression
+            )
+        }
+
+        // 2 bis. Mots répétés à la suite (« sur sur », « l'ancien l'ancien »).
+        //    \1 = « le même mot que le groupe 1 ». Exceptions voulues :
+        //    « nous nous », « vous vous » (verbes pronominaux), « très très »,
+        //    « oui oui », « non non », « si si » (insistance).
+        if removeFillers {
+            result = result.replacingOccurrences(
+                of: #"(?i)\b(?!(?:nous|vous|très|oui|non|si)\b)(\p{L}+(?:['’]\p{L}+)?)(?:[ ,]+\1\b)+"#,
+                with: "$1",
                 options: .regularExpression
             )
         }

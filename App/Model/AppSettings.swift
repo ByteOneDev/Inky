@@ -60,6 +60,8 @@ final class AppSettings {
     var formatting: FormattingOptions { didSet { save(formatting, Keys.formatting) } }
     /// Ajouter une espace si on dicte juste après un mot.
     var smartSpacing: Bool { didSet { defaults.set(smartSpacing, forKey: Keys.smartSpacing) } }
+    /// Restructurer les listes et longs textes avec l'IA (seulement quand c'est utile).
+    var smartStructure: Bool { didSet { defaults.set(smartStructure, forKey: Keys.smartStructure) } }
 
     // — Insertion —
     var restoreClipboard: Bool { didSet { defaults.set(restoreClipboard, forKey: Keys.restoreClipboard) } }
@@ -107,10 +109,21 @@ final class AppSettings {
         inputDeviceUID = defaults.string(forKey: Keys.inputDevice)
         playSounds = defaults.object(forKey: Keys.playSounds) as? Bool ?? true
         pauseMediaWhileDictating = defaults.object(forKey: Keys.pauseMedia) as? Bool ?? true
-        selectedModelID = defaults.string(forKey: Keys.model) ?? ModelCatalog.recommended.id
+        var model = defaults.string(forKey: Keys.model) ?? ModelCatalog.recommended.id
+        // 0.4 : passage unique à la dictée Apple, bien plus rapide, pour qui
+        // utilisait le modèle Whisper par défaut (un choix personnel est gardé).
+        if !defaults.bool(forKey: Keys.appleMigration) {
+            defaults.set(true, forKey: Keys.appleMigration)
+            if AppleSpeechEngine.isSupported, model == "openai_whisper-large-v3-v20240930_626MB" {
+                model = AppleSpeechEngine.modelID
+                defaults.set(model, forKey: Keys.model)
+            }
+        }
+        selectedModelID = model
         language = Self.load(Keys.language, from: defaults) ?? .french
         formatting = Self.load(Keys.formatting, from: defaults) ?? FormattingOptions()
         smartSpacing = defaults.object(forKey: Keys.smartSpacing) as? Bool ?? true
+        smartStructure = defaults.object(forKey: Keys.smartStructure) as? Bool ?? true
         restoreClipboard = defaults.object(forKey: Keys.restoreClipboard) as? Bool ?? true
         restoreDelayMs = defaults.object(forKey: Keys.restoreDelay) as? Int ?? 350
         overlayPosition = Self.load(Keys.overlayPosition, from: defaults) ?? .bottom
@@ -151,6 +164,8 @@ final class AppSettings {
         static let enabled = "general.enabled"
         static let formatting = "formatting.options"
         static let smartSpacing = "formatting.smartSpacing"
+        static let smartStructure = "formatting.smartStructure"
+        static let appleMigration = "transcription.appleDefaultMigrated"
         static let overlayEnabled = "overlay.enabled"
         static let overlayAlways = "overlay.alwaysVisible"
         static let overlayTimer = "overlay.showsTimer"

@@ -28,7 +28,7 @@ où se trouve le curseur, dans n'importe quelle app.
 | Sujet | Décision | Pourquoi |
 |---|---|---|
 | Base de code | Écrite de zéro, VoiceInk lu comme référence seulement | VoiceInk est GPL-3.0 : un fork imposerait la GPL. Inky est sous **MIT**. Ne jamais copier de code de VoiceInk. |
-| Moteur de transcription | **WhisperKit** (CoreML, Neural Engine) | Swift natif, async/await, téléchargement des modèles intégré, faible conso. Benchmark contre whisper.cpp dans `docs/benchmark.md`. |
+| Moteur de transcription | **Dictée Apple** (`SpeechAnalyzer`/`SpeechTranscriber`, macOS 26+) par défaut ; **WhisperKit** en option « qualité maximale » | Mesuré sur de vraies dictées : 8 à 12 × plus rapide que WhisperKit (0,2 s au lieu de 1,8 s pour 18 s de parole), 0 Mo, qualité proche. Un seul moteur chargé à la fois. Voir `docs/benchmark.md`. |
 | Modèle par défaut | `openai_whisper-large-v3-v20240930_626MB` (large-v3-turbo compressé) | Qualité proche de large-v3 en FR/EN, ~626 Mo sur disque. |
 | Raccourcis | `CGEventTap` maison (module `InkyHotkeys`) | Les raccourcis par défaut sont des **modificateurs seuls** (⌃⌘, ⌃⌥), que KeyboardShortcuts ne sait pas gérer. Un seul mécanisme pour tout. |
 | Stockage | **SQLite via GRDB** pour l'historique, `UserDefaults` pour les réglages | SQL explicite, migrations claires. SwiftData sur macOS 14 est trop jeune. |
@@ -44,6 +44,7 @@ où se trouve le curseur, dans n'importe quelle app.
 | IA (LLM) | **Apple Intelligence** (`FoundationModels`, module `InkyLLM`) derrière le protocole `LanguageModelProvider` | Local, 0 Mo à télécharger, parle français. Exige macOS 26+ et Apple Intelligence activé ; sinon repli : le texte dicté est inséré tel quel. Ollama ou une API pourront s'ajouter comme autre conformité. |
 | Prompts IA | Phrase déclencheuse **au début** de la dictée + consigne écrite à l'avance (`PromptTemplate`, `templates.json`) | Pas de raccourci en plus à retenir. Option « lire le texte déjà écrit » (AX) pour compléter un mail. |
 | Pause musique / vidéo | Commande « pause » / « lecture » du système via le framework privé `MediaRemote` (chargé avec `dlopen`), détection par CoreAudio (`kAudioProcessPropertyIsRunningOutput`) | Seul moyen de couvrir Musique, Spotify et les vidéos des navigateurs. On ne relance que si un processus qui jouait s'est arrêté après notre pause. |
+| Restructuration | `Restructuring.plan` : rien (phrase courte), IA (liste, longue phrase sans ponctuation, ≤ 160 mots), paragraphes par règles (au-delà) | « IA si utile » : aucune latence ajoutée aux phrases courtes. Consigne avec exemples (few-shot), nettoyage des puces, garde-fou de fidélité (85 % des mots), délai maximal, jamais dans un terminal. |
 | Statistiques | Table SQLite `usage` séparée de l'historique, **sans texte** | Doit survivre à la purge de l'historique ; ne garde que mots, durée, app. Calcul pur dans `UsageSummary` (testé). |
 | Interface | Fenêtre principale à barre latérale (style Wispr Flow) + pastille au choix : capsule, magnétoscope ou radio (4 finitions), ces deux derniers rangés contre le bord de l'écran | Une seule fenêtre pour accueil/stats, historique, dictionnaire, snippets, prompts IA, style et réglages. Thème dans `App/Design/Theme.swift`. |
 
@@ -160,6 +161,9 @@ où se trouve le curseur, dans n'importe quelle app.
   Tout ce qui touche à l'AppKit démarre dans une `Task` au tour suivant.
 - **Deux instances.** Deux Inky en même temps colleraient le texte deux fois : au
   lancement, Inky ferme les autres instances.
+- **Dictée Apple.** Pas de détection de langue : on choisit `fr_FR` ou `en_US`. Elle
+  garde les mots bégayés (« tu tu ») : `TextCleanup` les retire (sauf « nous nous »,
+  « vous vous », « très très »…). Le dictionnaire passe par `AnalysisContext.contextualStrings`.
 - **Apple Intelligence.** `SystemLanguageModel.default.availability` peut valoir
   `modelNotReady` longtemps après l'activation (téléchargement du modèle par macOS).
   Contexte limité (~4 000 tokens) : on coupe le texte du champ à 6 000 caractères.
@@ -189,7 +193,7 @@ où se trouve le curseur, dans n'importe quelle app.
 xcodegen generate                                   # régénère Inky.xcodeproj
 xcodebuild -scheme Inky -configuration Debug build  # compile
 cd Packages/InkyKit && swift test                   # tests unitaires
-scripts/release.sh 0.2.0                            # compile, signe, publie la release
+scripts/release.sh 0.4.0                            # compile, signe, publie la release
 ```
 
 ## Emplacements des données

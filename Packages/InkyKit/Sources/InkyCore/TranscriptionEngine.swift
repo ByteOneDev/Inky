@@ -34,10 +34,14 @@ public struct TranscriptionOptions: Sendable {
     /// Texte d'amorce : oriente le vocabulaire du modèle (noms propres, jargon).
     /// Prévu pour le dictionnaire personnel de la v0.2.
     public var prompt: String?
+    /// Mots du dictionnaire, pour les moteurs qui acceptent une liste de mots
+    /// à reconnaître (dictée Apple).
+    public var vocabulary: [String]
 
-    public init(language: DictationLanguage, prompt: String? = nil) {
+    public init(language: DictationLanguage, prompt: String? = nil, vocabulary: [String] = []) {
         self.language = language
         self.prompt = prompt
+        self.vocabulary = vocabulary
     }
 }
 
