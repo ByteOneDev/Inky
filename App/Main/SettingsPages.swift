@@ -139,12 +139,12 @@ struct ModelSettings: View {
     var body: some View {
         @Bindable var settings = app.settings
         let models = app.models
-        FormPage(title: "Transcription", subtitle: "Langue de dictée et modèle Whisper, exécuté localement sur le Neural Engine.") {
+        FormPage(title: "Transcription", subtitle: "Langue de dictée et moteur de transcription, exécuté localement sur le Neural Engine.") {
             Section("Langue") {
                 Picker("Langue de dictée", selection: $settings.language) {
                     ForEach(DictationLanguage.allCases) { Text($0.displayName).tag($0) }
                 }
-                Text("Forcer le français reste efficace quand tu glisses des mots anglais : Whisper les écrit correctement. La détection automatique se trompe plus souvent sur les phrases courtes.")
+                Text("Forcer le français reste efficace quand tu glisses des mots anglais. La détection automatique (Whisper seulement ; la dictée Apple utilise alors le français) se trompe plus souvent sur les phrases courtes.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -154,7 +154,7 @@ struct ModelSettings: View {
                     ModelRow(info: info, app: app)
                 }
             } header: {
-                Text("Modèles Whisper")
+                Text("Moteur de transcription")
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(statusText).font(.caption)

@@ -28,7 +28,7 @@ public enum ModelCatalog {
         id: AppleSpeechEngine.modelID,
         displayName: "Dictée Apple (ultra-rapide)",
         sizeMB: 0,
-        summary: "Recommandé. Intégré à macOS : 8 à 12 fois plus rapide que Whisper, rien à télécharger. Ponctuation un peu moins fine.",
+        summary: "8 à 12 fois plus rapide que Whisper, rien à télécharger. Ponctuation un peu moins fine (la restructuration compense).",
         isRecommended: true,
         isSystem: true
     )
