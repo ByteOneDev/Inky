@@ -68,6 +68,9 @@ final class WindowCoordinator: NSObject, NSWindowDelegate {
             window.setFrameAutosaveName("InkyMainWindow")
         }
         window.isReleasedWhenClosed = false
+        // S'ouvrir sur le bureau (Space) affiché, même si l'utilisateur est dans
+        // une app en plein écran, au lieu de rester sur un autre bureau.
+        window.collectionBehavior.insert(.moveToActiveSpace)
         window.delegate = self
         window.center()
         return window

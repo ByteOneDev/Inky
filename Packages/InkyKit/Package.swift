@@ -27,6 +27,8 @@ let package = Package(
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.1.1"),
         // SQLite en Swift (Gwendal Roué, licence MIT).
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.12.0"),
+        // Parakeet (NVIDIA) via CoreML / Neural Engine (FluidInference, licence Apache 2.0).
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.18.3"),
     ],
     targets: [
         // Protocoles et types partagés. Aucune dépendance : c'est le « contrat ».
@@ -42,6 +44,7 @@ let package = Package(
         .target(name: "InkyTranscription", dependencies: [
             "InkyCore",
             .product(name: "WhisperKit", package: "WhisperKit"),
+            .product(name: "FluidAudio", package: "FluidAudio"),
         ]),
 
         // Insertion du texte dans l'app active (presse-papier + ⌘V).

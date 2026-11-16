@@ -1,7 +1,10 @@
 import Foundation
 
-/// Description d'un modèle Whisper proposé dans l'app.
+/// Description d'un modèle de transcription proposé dans l'app.
 public struct WhisperModelInfo: Identifiable, Hashable, Sendable {
+    /// Moteur qui fait tourner ce modèle.
+    public enum Engine: Sendable { case whisper, parakeet }
+
     /// Nom du dossier sur Hugging Face (dépôt `argmaxinc/whisperkit-coreml`).
     public let id: String
     public let displayName: String
@@ -9,8 +12,9 @@ public struct WhisperModelInfo: Identifiable, Hashable, Sendable {
     public let sizeMB: Int
     public let summary: String
     public let isRecommended: Bool
-    /// Intégré au système (rien à télécharger ni à supprimer).
-    public var isSystem = false
+    public var engine: Engine = .whisper
+    /// Éditeur du modèle (affiché dans les réglages).
+    public var vendor = "OpenAI"
 }
 
 /// Liste **choisie** de modèles. Le dépôt en contient une trentaine (versions
@@ -23,23 +27,22 @@ public struct WhisperModelInfo: Identifiable, Hashable, Sendable {
 public enum ModelCatalog {
     public static let repository = "argmaxinc/whisperkit-coreml"
 
-    /// Le moteur de dictée d'Apple (macOS 26+), proposé en premier.
-    public static let apple = WhisperModelInfo(
-        id: AppleSpeechEngine.modelID,
-        displayName: "Dictée Apple (ultra-rapide)",
-        sizeMB: 0,
-        summary: "8 à 12 fois plus rapide que Whisper, rien à télécharger. Ponctuation un peu moins fine (la restructuration compense).",
-        isRecommended: true,
-        isSystem: true
-    )
-
-    public static let models: [WhisperModelInfo] = (AppleSpeechEngine.isSupported ? [apple] : []) + [
+    public static let models: [WhisperModelInfo] = [
+        WhisperModelInfo(
+            id: ParakeetEngine.modelID,
+            displayName: "Parakeet TDT v3",
+            sizeMB: 480,
+            summary: "Très rapide et précis, ponctuation comprise. 25 langues européennes dont le français.",
+            isRecommended: true,
+            engine: .parakeet,
+            vendor: "NVIDIA"
+        ),
         WhisperModelInfo(
             id: "openai_whisper-large-v3-v20240930_626MB",
             displayName: "Whisper Large v3 Turbo (compressé)",
             sizeMB: 626,
-            summary: "Qualité maximale : meilleure ponctuation, retire les répétitions. Plus lent (1 à 3 s par dictée).",
-            isRecommended: !AppleSpeechEngine.isSupported
+            summary: "Très bonne qualité, mais plus lent (1 à 3 s par dictée).",
+            isRecommended: false
         ),
         WhisperModelInfo(
             id: "openai_whisper-large-v3-v20240930",

@@ -2,6 +2,7 @@ import InkyCore
 import InkyInsertion
 import InkyHotkeys
 import InkyLLM
+import InkyMLX
 import InkyStorage
 import InkyTranscription
 import SwiftUI
@@ -37,6 +38,7 @@ final class AppModel {
     let models = ModelManager()
     let vocabulary = VocabularyStore()
     let templates = TemplateStore()
+    let localModels = LocalModelStore()
     let navigation = MainNavigation()
     let updates: UpdateManager
     let controller: DictationController
@@ -47,6 +49,8 @@ final class AppModel {
 
         // Le nom des touches dans les réglages suit la disposition clavier active.
         KeyNames.characterProvider = { KeyboardLayout.character(for: $0)?.uppercased() }
+
+        settings.resolveModel(isInstalled: models.isInstalled)
 
         let history: HistoryStore?
         do {
@@ -63,7 +67,8 @@ final class AppModel {
             vocabulary: vocabulary,
             templates: templates,
             history: history,
-            languageModel: AppleLanguageModel()
+            languageModel: AppleLanguageModel(),
+            localModels: localModels
         )
         updates = UpdateManager(settings: settings)
 

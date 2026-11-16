@@ -55,6 +55,17 @@ final class AppSettings {
     // — Transcription —
     var selectedModelID: String { didSet { defaults.set(selectedModelID, forKey: Keys.model) } }
     var language: DictationLanguage { didSet { save(language, Keys.language) } }
+    /// Vrai si un modèle a été choisi (et existe encore dans le catalogue).
+    @ObservationIgnored private(set) var hasExplicitModelChoice: Bool
+
+    /// Sans choix explicite : le modèle recommandé s'il est installé, sinon le
+    /// premier modèle installé (ex. Whisper pour qui l'avait téléchargé avant).
+    func resolveModel(isInstalled: (String) -> Bool) {
+        guard !hasExplicitModelChoice, !isInstalled(selectedModelID),
+              let fallback = ModelCatalog.models.first(where: { isInstalled($0.id) })
+        else { return }
+        selectedModelID = fallback.id
+    }
 
     // — Mise en forme —
     var formatting: FormattingOptions { didSet { save(formatting, Keys.formatting) } }
@@ -90,6 +101,11 @@ final class AppSettings {
     /// l'historique est désactivé.
     var collectStats: Bool { didSet { defaults.set(collectStats, forKey: Keys.collectStats) } }
 
+    // — Modèle d'IA (prompts IA, restructuration) —
+    /// `appleIntelligenceID` ou l'identifiant d'un modèle local (`LocalModelCatalog`).
+    var languageModelID: String { didSet { defaults.set(languageModelID, forKey: Keys.languageModel) } }
+    static let appleIntelligenceID = "apple-intelligence"
+
     // — Modèles de prompts (IA) —
     var templatesEnabled: Bool { didSet { defaults.set(templatesEnabled, forKey: Keys.templatesEnabled) } }
 
@@ -109,17 +125,11 @@ final class AppSettings {
         inputDeviceUID = defaults.string(forKey: Keys.inputDevice)
         playSounds = defaults.object(forKey: Keys.playSounds) as? Bool ?? true
         pauseMediaWhileDictating = defaults.object(forKey: Keys.pauseMedia) as? Bool ?? true
-        var model = defaults.string(forKey: Keys.model) ?? ModelCatalog.recommended.id
-        // 0.4 : passage unique à la dictée Apple, bien plus rapide, pour qui
-        // utilisait le modèle Whisper par défaut (un choix personnel est gardé).
-        if !defaults.bool(forKey: Keys.appleMigration) {
-            defaults.set(true, forKey: Keys.appleMigration)
-            if AppleSpeechEngine.isSupported, model == "openai_whisper-large-v3-v20240930_626MB" {
-                model = AppleSpeechEngine.modelID
-                defaults.set(model, forKey: Keys.model)
-            }
-        }
-        selectedModelID = model
+        // Un identifiant inconnu (ex. « apple-speech », moteur retiré en 0.4.1)
+        // est ignoré : `resolveModel` choisira un modèle installé.
+        let stored = defaults.string(forKey: Keys.model)
+        selectedModelID = stored.flatMap { ModelCatalog.info(for: $0)?.id } ?? ModelCatalog.recommended.id
+        hasExplicitModelChoice = stored.flatMap { ModelCatalog.info(for: $0) } != nil
         language = Self.load(Keys.language, from: defaults) ?? .french
         formatting = Self.load(Keys.formatting, from: defaults) ?? FormattingOptions()
         smartSpacing = defaults.object(forKey: Keys.smartSpacing) as? Bool ?? true
@@ -138,6 +148,7 @@ final class AppSettings {
         keepAudio = defaults.object(forKey: Keys.keepAudio) as? Bool ?? true
         collectStats = defaults.object(forKey: Keys.collectStats) as? Bool ?? true
         templatesEnabled = defaults.object(forKey: Keys.templatesEnabled) as? Bool ?? true
+        languageModelID = defaults.string(forKey: Keys.languageModel) ?? Self.appleIntelligenceID
         hasCompletedOnboarding = defaults.bool(forKey: Keys.onboarding)
         hasSeenTutorial = defaults.bool(forKey: Keys.tutorial)
     }
@@ -165,7 +176,6 @@ final class AppSettings {
         static let formatting = "formatting.options"
         static let smartSpacing = "formatting.smartSpacing"
         static let smartStructure = "formatting.smartStructure"
-        static let appleMigration = "transcription.appleDefaultMigrated"
         static let overlayEnabled = "overlay.enabled"
         static let overlayAlways = "overlay.alwaysVisible"
         static let overlayTimer = "overlay.showsTimer"
@@ -182,5 +192,6 @@ final class AppSettings {
         static let onboarding = "onboarding.completed"
         static let collectStats = "stats.enabled"
         static let templatesEnabled = "templates.enabled"
+        static let languageModel = "llm.model"
     }
 }

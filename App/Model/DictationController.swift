@@ -4,6 +4,7 @@ import InkyCore
 import InkyHotkeys
 import InkyInsertion
 import InkyLLM
+import InkyMLX
 import InkyStorage
 import InkyTranscription
 import Observation
@@ -65,16 +66,26 @@ final class DictationController {
     @ObservationIgnored let models: ModelManager
     @ObservationIgnored let vocabulary: VocabularyStore
     @ObservationIgnored let templates: TemplateStore
-    @ObservationIgnored let languageModel: any LanguageModelProvider
+    /// Apple Intelligence (par défaut) et les modèles locaux téléchargés.
+    @ObservationIgnored let appleLanguageModel: any LanguageModelProvider
+    @ObservationIgnored let localModels: LocalModelStore
+    /// Le modèle d'IA choisi dans les réglages (prompts IA, restructuration).
+    var languageModel: any LanguageModelProvider {
+        let id = settings.languageModelID
+        if id != AppSettings.appleIntelligenceID, localModels.isInstalled(id), let local = localModels.provider(for: id) {
+            return local
+        }
+        return appleLanguageModel
+    }
     @ObservationIgnored let history: HistoryStore?
     @ObservationIgnored let overlay = OverlayController()
     @ObservationIgnored let hotkeys = EventTapMonitor()
     /// Deux moteurs possibles ; un seul est chargé en mémoire à la fois.
     @ObservationIgnored private let whisperEngine: any TranscriptionEngine
-    @ObservationIgnored private let appleEngine: any TranscriptionEngine
+    @ObservationIgnored private let parakeetEngine: any TranscriptionEngine
     /// Moteur du modèle choisi.
     private var engine: any TranscriptionEngine {
-        settings.selectedModelID == AppleSpeechEngine.modelID ? appleEngine : whisperEngine
+        ModelCatalog.info(for: settings.selectedModelID)?.engine == .parakeet ? parakeetEngine : whisperEngine
     }
     @ObservationIgnored private let inserter: any TextInserter
     @ObservationIgnored private let recorder = AudioRecorder()
@@ -102,8 +113,9 @@ final class DictationController {
         templates: TemplateStore,
         history: HistoryStore?,
         languageModel: any LanguageModelProvider = AppleLanguageModel(),
+        localModels: LocalModelStore,
         whisperEngine: any TranscriptionEngine = WhisperKitEngine(),
-        appleEngine: any TranscriptionEngine = AppleSpeechEngine(),
+        parakeetEngine: any TranscriptionEngine = ParakeetEngine(),
         inserter: any TextInserter = PasteboardInserter()
     ) {
         self.settings = settings
@@ -111,10 +123,11 @@ final class DictationController {
         self.models = models
         self.vocabulary = vocabulary
         self.templates = templates
-        self.languageModel = languageModel
+        self.appleLanguageModel = languageModel
+        self.localModels = localModels
         self.history = history
         self.whisperEngine = whisperEngine
-        self.appleEngine = appleEngine
+        self.parakeetEngine = parakeetEngine
         self.inserter = inserter
 
         // Le callback de l'event tap doit rendre la main en quelques
@@ -172,6 +185,12 @@ final class DictationController {
         } then: { [weak self] in
             self?.applyOverlaySettings()
         }
+        // Modèle d'IA local choisi : on le charge tout de suite en arrière-plan
+        // (2 à 5 s), pour que la première restructuration soit rapide.
+        prepareLanguageModel()
+        observe { [settings, localModels] in (settings.languageModelID, localModels.installed) } then: { [weak self] in
+            self?.prepareLanguageModel()
+        }
         observe { [settings] in settings.historyRetention } then: { [weak self] in
             self?.purgeHistory()
         }
@@ -226,7 +245,7 @@ final class DictationController {
         guard models.isInstalled(id) else {
             loadedModelID = nil
             await whisperEngine.unload()
-            await appleEngine.unload()
+            await parakeetEngine.unload()
             modelStatus = .notInstalled
             return
         }
@@ -237,7 +256,7 @@ final class DictationController {
         modelStatus = .loading(name)
         // Libérer l'autre moteur : Whisper occupe ~1 Go de mémoire.
         let engine = self.engine
-        let other = id == AppleSpeechEngine.modelID ? whisperEngine : appleEngine
+        let other = ModelCatalog.info(for: id)?.engine == .parakeet ? whisperEngine : parakeetEngine
         await other.unload()
         do {
             try await engine.load(modelAt: models.folder(for: id))
@@ -449,6 +468,13 @@ final class DictationController {
         saveToHistory(text: text, spoken: spoken, raw: output.text, clip: clip, output: output)
     }
 
+    private func prepareLanguageModel() {
+        let id = settings.languageModelID
+        localModels.unloadAll(except: id)
+        guard id != AppSettings.appleIntelligenceID, localModels.isInstalled(id), let local = localModels.provider(for: id) else { return }
+        Task.detached(priority: .utility) { await local.preload() }
+    }
+
     // MARK: - Restructuration (listes, sous-niveaux, paragraphes)
 
     /// Apps où un texte sur plusieurs lignes serait dangereux : dans un
@@ -476,7 +502,9 @@ final class DictationController {
         let model = languageModel
         let request = Restructuring.request(for: text)
         // Délai maximal : au-delà, mieux vaut insérer la dictée brute tout de suite.
-        let timeout = max(4.0, Double(WordCounter.count(text)) / 40)
+        // Les modèles locaux (MLX) sont 2 à 4 fois plus lents qu'Apple Intelligence.
+        let isLocal = model is LocalLanguageModel
+        let timeout = isLocal ? max(10.0, Double(WordCounter.count(text)) / 15) : max(4.0, Double(WordCounter.count(text)) / 40)
         let response: String? = await withTaskGroup(of: String?.self) { group in
             group.addTask { try? await model.generate(request) }
             group.addTask {

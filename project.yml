@@ -22,6 +22,9 @@ configFiles:
 packages:
   InkyKit:
     path: Packages/InkyKit
+  # Modèles de langage locaux (MLX). Package séparé : MLX exige xcodebuild.
+  InkyMLX:
+    path: Packages/InkyMLX
 
 targets:
   Inky:
@@ -46,6 +49,8 @@ targets:
         product: InkyUpdates
       - package: InkyKit
         product: InkyLLM
+      - package: InkyMLX
+        product: InkyMLX
     info:
       path: App/Info.plist
       properties:

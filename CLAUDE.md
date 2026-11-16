@@ -28,7 +28,7 @@ où se trouve le curseur, dans n'importe quelle app.
 | Sujet | Décision | Pourquoi |
 |---|---|---|
 | Base de code | Écrite de zéro, VoiceInk lu comme référence seulement | VoiceInk est GPL-3.0 : un fork imposerait la GPL. Inky est sous **MIT**. Ne jamais copier de code de VoiceInk. |
-| Moteur de transcription | **Dictée Apple** (`SpeechAnalyzer`/`SpeechTranscriber`, macOS 26+) par défaut ; **WhisperKit** en option « qualité maximale » | Mesuré sur de vraies dictées : 8 à 12 × plus rapide que WhisperKit (0,2 s au lieu de 1,8 s pour 18 s de parole), 0 Mo, qualité proche. Un seul moteur chargé à la fois. Voir `docs/benchmark.md`. |
+| Moteur de transcription | **Parakeet TDT 0.6B v3** (NVIDIA, via **FluidAudio**, CoreML) par défaut ; **WhisperKit** en option | Mesuré sur de vraies dictées : 0,05 à 0,4 s pour 3 à 44 s de parole (Whisper : 1,2 à 2,7 s), ponctuation comprise, ~480 Mo. La dictée Apple (`SpeechAnalyzer`) a été essayée en 0.4.0 puis **retirée** en 0.5 : qualité jugée insuffisante par l'utilisateur. Un seul moteur chargé à la fois. Voir `docs/benchmark.md`. |
 | Modèle par défaut | `openai_whisper-large-v3-v20240930_626MB` (large-v3-turbo compressé) | Qualité proche de large-v3 en FR/EN, ~626 Mo sur disque. |
 | Raccourcis | `CGEventTap` maison (module `InkyHotkeys`) | Les raccourcis par défaut sont des **modificateurs seuls** (⌃⌘, ⌃⌥), que KeyboardShortcuts ne sait pas gérer. Un seul mécanisme pour tout. |
 | Stockage | **SQLite via GRDB** pour l'historique, `UserDefaults` pour les réglages | SQL explicite, migrations claires. SwiftData sur macOS 14 est trop jeune. |
@@ -38,10 +38,10 @@ où se trouve le curseur, dans n'importe quelle app.
 | Architecture CPU | arm64 uniquement | Le Neural Engine n'existe que sur Apple Silicon. |
 | Langue | Français par défaut, anglais et détection auto en option | L'utilisateur mélange FR/EN ; pas de modèles `.en`. |
 | Mises à jour | Module maison `InkyUpdates` (API GitHub Releases), pas Sparkle | Pas d'appcast ni de clé EdDSA à gérer. Vérification : HTTPS + SHA-256 + **même certificat** que l'app installée (si elle n'est pas ad hoc). Désactivable. |
-| Releases | `scripts/release.sh X.Y.Z` en local (signature stable) ; workflow GitHub Actions en secours | Le compte GitHub ne peut pas lancer de runners macOS (facturation). La signature locale stable évite de perdre l'Accessibilité à chaque mise à jour. |
+| Releases | `scripts/release.sh X.Y.Z` en local (signature stable) : un **.dmg signé** (installation manuelle) et un .zip + SHA-256 (mises à jour automatiques) ; workflow GitHub Actions en secours | Le compte GitHub ne peut pas lancer de runners macOS (facturation). La signature locale stable évite de perdre l'Accessibilité à chaque mise à jour. |
 | Mise en forme | Règles locales, sans IA (`InkyCore/Formatting`) | Hésitations, auto-corrections orales, commandes vocales, listes, dictionnaire, style messagerie. Le LLM (v0.3) viendra en complément. |
 | Dictionnaire | Fichier JSON `dictionary.json` | Lisible, facile à sauvegarder et à éditer à la main. |
-| IA (LLM) | **Apple Intelligence** (`FoundationModels`, module `InkyLLM`) derrière le protocole `LanguageModelProvider` | Local, 0 Mo à télécharger, parle français. Exige macOS 26+ et Apple Intelligence activé ; sinon repli : le texte dicté est inséré tel quel. Ollama ou une API pourront s'ajouter comme autre conformité. |
+| IA (LLM) | **Apple Intelligence** (`FoundationModels`, module `InkyLLM`) par défaut, ou un **modèle ouvert local** via **MLX** (package séparé `InkyMLX` : Qwen3, Ministral 3, Llama 3.2, Phi-4 mini, Gemma 3, Mistral 7B, en 4 bits, 1 à 4 Go), tous derrière `LanguageModelProvider` | 100 % local, choix de l'utilisateur (pas de cloud : Claude/GPT exclus). Modèles téléchargés depuis `mlx-community` sur Hugging Face dans notre dossier, chargés au premier usage, libérés après 15 min. MLX exige Xcode (shaders Metal) : d'où le package séparé et `-skipPackagePluginValidation -skipMacroValidation`. |
 | Prompts IA | Phrase déclencheuse **au début** de la dictée + consigne écrite à l'avance (`PromptTemplate`, `templates.json`) | Pas de raccourci en plus à retenir. Option « lire le texte déjà écrit » (AX) pour compléter un mail. |
 | Pause musique / vidéo | Commande « pause » / « lecture » du système via le framework privé `MediaRemote` (chargé avec `dlopen`), détection par CoreAudio (`kAudioProcessPropertyIsRunningOutput`) | Seul moyen de couvrir Musique, Spotify et les vidéos des navigateurs. On ne relance que si un processus qui jouait s'est arrêté après notre pause. |
 | Restructuration | `Restructuring.plan` : rien (phrase courte), IA (liste, longue phrase sans ponctuation, ≤ 160 mots), paragraphes par règles (au-delà) | « IA si utile » : aucune latence ajoutée aux phrases courtes. Consigne avec exemples (few-shot), nettoyage des puces, garde-fou de fidélité (85 % des mots), délai maximal, jamais dans un terminal. |
@@ -73,6 +73,8 @@ où se trouve le curseur, dans n'importe quelle app.
 │                                                                                     │
 │  InkyUpdates : SemanticVersion · UpdateClient (GitHub) · UpdateInstaller            │
 │  InkyLLM : AppleLanguageModel (FoundationModels, macOS 26+)                         │
+│  InkyTranscription : WhisperKitEngine · ParakeetEngine (FluidAudio)                 │
+│  Package InkyMLX : LocalLanguageModel (MLX) · LocalModelStore · catalogue           │
 │                         InkyCore : protocoles + types partagés                       │
 │      TranscriptionEngine · TextInserter · TextProcessor · AudioClip                 │
 │      LanguageModelProvider · Templates/ (PromptTemplate, TemplateMatcher)           │
@@ -161,9 +163,12 @@ où se trouve le curseur, dans n'importe quelle app.
   Tout ce qui touche à l'AppKit démarre dans une `Task` au tour suivant.
 - **Deux instances.** Deux Inky en même temps colleraient le texte deux fois : au
   lancement, Inky ferme les autres instances.
-- **Dictée Apple.** Pas de détection de langue : on choisit `fr_FR` ou `en_US`. Elle
-  garde les mots bégayés (« tu tu ») : `TextCleanup` les retire (sauf « nous nous »,
-  « vous vous », « très très »…). Le dictionnaire passe par `AnalysisContext.contextualStrings`.
+- **Parakeet.** Garde des « euh » et des mots bégayés (« tu tu ») : `TextCleanup` les
+  retire (sauf « nous nous », « vous vous », « très très »…). Indice de langue
+  (`Language.french`) pour écarter les jetons d'autres alphabets.
+- **MLX et Metal.** Compiler MLX demande le composant « Metal Toolchain » d'Xcode
+  (`xcodebuild -downloadComponent MetalToolchain`). `swift build`/`swift test` ne
+  suffisent pas pour `InkyMLX` : c'est pour ça qu'il n'est pas dans InkyKit.
 - **Apple Intelligence.** `SystemLanguageModel.default.availability` peut valoir
   `modelNotReady` longtemps après l'activation (téléchargement du modèle par macOS).
   Contexte limité (~4 000 tokens) : on coupe le texte du champ à 6 000 caractères.
@@ -182,8 +187,8 @@ où se trouve le curseur, dans n'importe quelle app.
 - Swift 6 (concurrence stricte). L'UI et l'orchestration sont `@MainActor` ; les
   moteurs sont des `actor`.
 - Pas de dépendance tierce sans l'inscrire dans le tableau ci-dessus.
-  Actuelles : WhisperKit (MIT), GRDB (MIT). Frameworks Apple : FoundationModels,
-  Charts. Pas de Sparkle (voir Mises à jour).
+  Actuelles : WhisperKit (MIT), GRDB (MIT), FluidAudio (Apache 2.0), mlx-swift-lm
+  (MIT), swift-transformers (Apache 2.0). Frameworks Apple : FoundationModels, Charts. Pas de Sparkle (voir Mises à jour).
 - Les tests de logique pure vivent dans `Packages/InkyKit/Tests` : `swift test`.
 - Un commit par jalon minimum, messages en français.
 
@@ -191,15 +196,16 @@ où se trouve le curseur, dans n'importe quelle app.
 
 ```bash
 xcodegen generate                                   # régénère Inky.xcodeproj
-xcodebuild -scheme Inky -configuration Debug build  # compile
+xcodebuild -scheme Inky -configuration Debug -skipPackagePluginValidation -skipMacroValidation build  # compile
 cd Packages/InkyKit && swift test                   # tests unitaires
-scripts/release.sh 0.4.0                            # compile, signe, publie la release
+scripts/release.sh 0.5.0                            # compile, signe, publie la release
 ```
 
 ## Emplacements des données
 
 - Réglages : `UserDefaults` (domaine `com.byteonedev.inky`)
-- Modèles : `~/Library/Application Support/Inky/Models/`
+- Modèles : `~/Library/Application Support/Inky/Models/` (Whisper sous `models/`,
+  Parakeet sous `parakeet/`, modèles de langage sous `llm/`)
 - Historique : `~/Library/Application Support/Inky/history.sqlite`
 - Dictionnaire : `~/Library/Application Support/Inky/dictionary.json`
 - Prompts IA : `~/Library/Application Support/Inky/templates.json`

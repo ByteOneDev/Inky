@@ -144,7 +144,7 @@ struct ModelSettings: View {
                 Picker("Langue de dictée", selection: $settings.language) {
                     ForEach(DictationLanguage.allCases) { Text($0.displayName).tag($0) }
                 }
-                Text("Forcer le français reste efficace quand tu glisses des mots anglais. La détection automatique (Whisper seulement ; la dictée Apple utilise alors le français) se trompe plus souvent sur les phrases courtes.")
+                Text("Forcer le français reste efficace quand tu glisses des mots anglais. La détection automatique se trompe plus souvent sur les phrases courtes.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -198,7 +198,7 @@ private struct ModelRow: View {
                             .background(.green.opacity(0.2), in: Capsule())
                     }
                 }
-                Text(info.isSystem ? "\(info.summary) — intégré à macOS" : "\(info.summary) — \(info.sizeMB) Mo")
+                Text("\(info.vendor) · \(info.summary) — \(info.sizeMB) Mo")
                     .font(.caption).foregroundStyle(.secondary)
                 if let progress = models.downloads[info.id] {
                     ProgressView(value: progress).controlSize(.small)
@@ -213,14 +213,12 @@ private struct ModelRow: View {
                 if !selected {
                     Button("Utiliser") { app.settings.selectedModelID = info.id }
                 }
-                if !info.isSystem {
-                    Button(role: .destructive) {
-                        models.delete(info.id)
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .help("Supprimer du disque")
+                Button(role: .destructive) {
+                    models.delete(info.id)
+                } label: {
+                    Image(systemName: "trash")
                 }
+                .help("Supprimer du disque")
             } else {
                 Button("Télécharger") { models.download(info.id) }
             }

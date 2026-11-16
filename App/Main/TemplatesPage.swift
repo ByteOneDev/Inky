@@ -17,6 +17,9 @@ struct TemplatesPage: View {
         ) {
             statusCard
 
+            SectionLabel(text: "Modèle d'IA").padding(.top, 6)
+            LanguageModelPicker(app: app, onChange: refreshAvailability)
+
             Card {
                 VStack(alignment: .leading, spacing: 8) {
                     SectionLabel(text: "Exemple")
@@ -69,7 +72,7 @@ struct TemplatesPage: View {
                     switch availability {
                     case .available:
                         Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
-                        Text("\(app.controller.languageModel.displayName) est prêt, 100 % local.")
+                        Text("\(app.controller.languageModel.displayName) est prêt, 100 % local. Il sert aussi à la restructuration (Style).")
                     case .unavailable(let reason):
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                         VStack(alignment: .leading, spacing: 6) {

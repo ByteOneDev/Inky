@@ -3,10 +3,14 @@
 Dictée vocale **100 % locale** pour macOS. Tu maintiens un raccourci, tu parles, tu
 relâches : le texte apparaît là où se trouve ton curseur, dans n'importe quelle app.
 
-- 🔒 **Privé** : la transcription tourne sur ton Mac (dictée Apple ou Whisper, sur le Neural Engine).
+- 🔒 **Privé** : la transcription tourne sur ton Mac (Parakeet de NVIDIA ou Whisper d'OpenAI, sur le Neural Engine).
   Aucun audio, aucun texte, aucune statistique n'est envoyé sur Internet.
-- ⚡ **Rapide** : avec la dictée Apple (macOS 26+), 0,2 à 0,4 s pour transcrire jusqu'à
-  45 s de parole. Whisper reste disponible pour une qualité maximale.
+- ⚡ **Rapide** : avec Parakeet (NVIDIA), 0,05 à 0,4 s pour transcrire jusqu'à 45 s de
+  parole, ponctuation comprise. Whisper reste disponible.
+- 🧠 **IA locales au choix** pour les prompts IA et la restructuration : Apple
+  Intelligence, ou un modèle ouvert téléchargé (Qwen3, Ministral 3 de Mistral, Llama
+  3.2 de Meta, Phi-4 mini de Microsoft, Gemma 3 de Google, Mistral 7B), de 1 à 4 Go,
+  qui tourne sur ton Mac grâce à MLX.
 - 📝 **Restructuration automatique** : une énumération dictée devient une liste à puces
   avec sous-niveaux, un long texte est découpé en paragraphes et reponctué. L'IA
   (locale) n'intervient que quand c'est utile : les phrases courtes restent instantanées.
@@ -57,9 +61,10 @@ historique, dictionnaire, snippets, prompts IA, style et réglages.
 
 ## Installation (release)
 
-1. Télécharge `Inky-x.y.z.zip` depuis la page
-   [Releases](https://github.com/ByteOneDev/Inky/releases) et place `Inky.app` dans
-   `/Applications`.
+1. Télécharge `Inky-x.y.z.dmg` depuis la page
+   [Releases](https://github.com/ByteOneDev/Inky/releases), ouvre-le et glisse
+   **Inky** sur le raccourci **Applications**. L'image disque et l'app sont signées
+   (certificat personnel), mais pas notarisées.
 2. **L'app n'est pas notarisée par Apple** (pas de compte développeur payant) : au
    premier lancement, macOS la bloque. Va dans *Réglages Système › Confidentialité et
    sécurité*, puis clique sur **« Ouvrir quand même »**. Ou en Terminal :
@@ -67,7 +72,7 @@ historique, dictionnaire, snippets, prompts IA, style et réglages.
    xattr -dr com.apple.quarantine /Applications/Inky.app
    ```
 3. Suis l'écran d'accueil : autorise le **micro**, puis l'**Accessibilité**, puis
-   télécharge le modèle recommandé (626 Mo).
+   télécharge le modèle recommandé (Parakeet, 480 Mo).
 
 > ⚠️ **Après chaque mise à jour**, macOS peut considérer Inky comme une nouvelle app
 > (signature ad hoc) : si les raccourcis ne marchent plus, retire Inky de la liste
@@ -78,7 +83,8 @@ historique, dictionnaire, snippets, prompts IA, style et réglages.
 | Élément | Disque | RAM pendant l'utilisation |
 |---|---|---|
 | Application | ~15 Mo | ~60 Mo |
-| Modèle recommandé (Large v3 Turbo compressé) | 626 Mo | ~0,8 à 1,2 Go |
+| Modèle de transcription recommandé (Parakeet TDT v3) | 480 Mo | ~0,5 Go |
+| IA locale (optionnelle, ex. Ministral 3 3B) | 1 à 4 Go | 2 à 4 Go, libérés après 15 min |
 | Cache CoreML (optimisation pour ta puce, créé au 1er chargement) | ~0,3 à 0,6 Go | — |
 | Historique (texte + audio AAC ~4 Ko/s) | quelques Mo par mois | — |
 | **Total** | **≈ 1 à 1,3 Go** | **≈ 1 Go** |
@@ -92,7 +98,8 @@ Pour tout supprimer : quitter Inky, supprimer l'app et le dossier
 
 ## Compiler depuis les sources
 
-Publier une release depuis ton Mac : `scripts/release.sh 0.3.0` (tests, compilation,
+Publier une release depuis ton Mac : `scripts/release.sh 0.5.0` (`--no-publish` pour
+seulement préparer le .dmg et le .zip dans `dist/`) (tests, compilation,
 signature avec le certificat de `Local.xcconfig`, archive + SHA-256, release GitHub).
 
 Prérequis : macOS 14+, Apple Silicon, Xcode 16+ et [XcodeGen](https://github.com/yonaskolb/XcodeGen).

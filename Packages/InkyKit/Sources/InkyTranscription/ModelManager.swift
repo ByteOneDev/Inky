@@ -4,7 +4,7 @@ import Observation
 import WhisperKit
 import os
 
-/// Télécharge, liste et supprime les modèles Whisper.
+/// Télécharge, liste et supprime les modèles de transcription (Whisper, Parakeet).
 ///
 /// Les modèles ne sont pas dans l'app (ils pèsent des centaines de Mo) : ils
 /// sont récupérés à la demande depuis Hugging Face, dans
@@ -42,7 +42,13 @@ public final class ModelManager {
 
     /// Dossier d'un modèle donné.
     public func folder(for modelID: String) -> URL {
-        downloadBase
+        if ModelCatalog.info(for: modelID)?.engine == .parakeet {
+            // FluidAudio range les fichiers dans un dossier au nom du dépôt
+            // (« parakeet-tdt-0.6b-v3 ») : on utilise le même nom.
+            return downloadBase.appending(path: "parakeet", directoryHint: .isDirectory)
+                .appending(path: ParakeetEngine.folderName, directoryHint: .isDirectory)
+        }
+        return downloadBase
             .appending(path: "models", directoryHint: .isDirectory)
             .appending(path: ModelCatalog.repository, directoryHint: .isDirectory)
             .appending(path: modelID, directoryHint: .isDirectory)
@@ -54,7 +60,7 @@ public final class ModelManager {
     public func refresh() {
         let fm = FileManager.default
         installed = Set(ModelCatalog.models.filter { info in
-            info.isSystem || fm.fileExists(atPath: folder(for: info.id).appending(path: Self.completionMarker).path)
+            fm.fileExists(atPath: folder(for: info.id).appending(path: Self.completionMarker).path)
         }.map(\.id))
     }
 
@@ -69,6 +75,24 @@ public final class ModelManager {
             guard let self else { return }
             do {
                 try AppPaths.ensureExists(self.downloadBase)
+                if ModelCatalog.info(for: modelID)?.engine == .parakeet {
+                    // Parakeet : FluidAudio télécharge les fichiers CoreML dans notre dossier.
+                    let folder = self.folder(for: modelID)
+                    try await ParakeetEngine.download(to: folder) { [weak self] fraction in
+                        Task { @MainActor in
+                            guard let self, let previous = self.downloads[modelID] else { return }
+                            if fraction != previous {
+                                self.downloads[modelID] = fraction
+                                self.lastProgressAt[modelID] = Date()
+                            }
+                        }
+                    }
+                    try Task.checkCancellation()
+                    FileManager.default.createFile(atPath: folder.appending(path: Self.completionMarker).path, contents: Data())
+                    self.logger.info("Modèle téléchargé : \(modelID, privacy: .public)")
+                    self.finishDownload(modelID)
+                    return
+                }
                 let folder = try await WhisperKit.download(
                     variant: modelID,
                     downloadBase: self.downloadBase,
@@ -100,11 +124,15 @@ public final class ModelManager {
                 self.lastError = "Échec du téléchargement de \(modelID) : \(error.localizedDescription)"
                 self.logger.error("Échec du téléchargement : \(error.localizedDescription, privacy: .public)")
             }
-            self.downloads[modelID] = nil
-            self.lastProgressAt[modelID] = nil
-            self.tasks[modelID] = nil
-            self.refresh()
+            self.finishDownload(modelID)
         }
+    }
+
+    private func finishDownload(_ modelID: String) {
+        downloads[modelID] = nil
+        lastProgressAt[modelID] = nil
+        tasks[modelID] = nil
+        refresh()
     }
 
     /// Famille de modèle, pour savoir quel tokenizer récupérer.

@@ -86,3 +86,34 @@ retenu : Apple est déjà sous la demi-seconde, sans dépendance ni télécharge
 | Liste de courses avec sous-niveaux | IA | 1,4 s |
 | Réunion, trois points | IA | 2,6 s |
 | Dictée de 112 s (~300 mots) | paragraphes par règles | < 1 ms (l'IA prenait 9,4 s) |
+
+
+## 2026-11-16 — Parakeet TDT v3 (NVIDIA, FluidAudio) sur les mêmes dictées
+
+| Audio | WhisperKit 626 Mo | Parakeet TDT v3 |
+|---|---|---|
+| 2,8 s | 1,20 s | 0,05 s |
+| 8,9 s | 1,62 s | 0,06 s |
+| 12,7 s | 1,76 s | 0,09 s |
+| 18,1 s | 1,87 s | 0,35 s |
+| 43,6 s | 2,65 s | 0,38 s |
+| 111,6 s | 8,06 s | 0,93 s |
+
+Qualité : très bonne, ponctuation et majuscules comprises (« Blockbench » bien écrit).
+Garde quelques « euh » et bégaiements, retirés par `TextCleanup`. Chargement : 0,2 s.
+**Décision** : Parakeet par défaut ; la dictée Apple est retirée (jugée mauvaise à l'usage).
+
+## 2026-11-16 — Modèles de langage locaux (MLX, 4 bits), MacBook M4
+
+Restructuration d'une liste dictée et rédaction d'un mail (prompt « mail pro »).
+
+| Modèle | Chargement | Liste | Mail | Qualité |
+|---|---|---|---|---|
+| Apple Intelligence | — | 1,4 s | 1,4 s | correcte |
+| Ministral 3 3B (Mistral) | 3,2 s | 3,2 s | 2,9 s | la meilleure en français |
+| Gemma 3 4B (Google) | 1,7 s | 4,7 s | 3,0 s | très bonne |
+| Qwen3 4B (Alibaba) | 1,1 s | 7,0 s | 4,2 s | tutoie, contresens sur le mail |
+
+**Décision** : Apple Intelligence reste le choix par défaut (le plus rapide) ;
+Ministral 3 3B est recommandé parmi les modèles locaux. Délai maximal de la
+restructuration porté à 10 s pour les modèles locaux.
